@@ -1,0 +1,65 @@
+{
+  "projectType": "frontend",
+  "projectName": "WireGuird",
+  "projectDescription": "A GTK GUI client for managing WireGuard VPN tunnels on Linux.",
+  "theme": "almond",
+  "primaryColor": "#891d22",
+  "lightColor": "#c4848c",
+  "darkColor": "#e2c7c8",
+  "navigation": {
+    "groups": [
+      {
+        "group": "Get Started",
+        "pages": [
+          "introduction",
+          "installation",
+          "quickstart"
+        ]
+      },
+      {
+        "group": "User Guide",
+        "pages": [
+          "user-guide/managing-tunnels",
+          "user-guide/connecting",
+          "user-guide/importing-exporting",
+          "user-guide/settings"
+        ]
+      },
+      {
+        "group": "Advanced",
+        "pages": [
+          "advanced/building-from-source",
+          "advanced/troubleshooting",
+          "advanced/dependencies"
+        ]
+      },
+      {
+        "group": "Development",
+        "pages": [
+          "development/architecture",
+          "development/contributing"
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "System tray integration with color-coded connection status",
+    "Visual tunnel management from /etc/wireguard",
+    "Built-in tunnel editor with syntax highlighting",
+    "Import and export tunnels (.conf and .zip formats)",
+    "Multiple simultaneous tunnel connections",
+    "Real-time connection statistics and handshake monitoring",
+    "Automatic update checking",
+    "Start minimized to system tray"
+  ],
+  "publicApiSurface": [
+    "gui.Create() - Initialize GUI application",
+    "gui.Tunnels - Main tunnel management struct",
+    "gui.ShowError() - Display error dialogs",
+    "settings.Settings - Application settings management",
+    "System tray indicator with menu",
+    "Tunnel list view with connection status",
+    "Tunnel editor window",
+    "Settings window"
+  ]
+}
