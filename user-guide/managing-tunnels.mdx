@@ -1,0 +1,173 @@
+---
+title: Managing Tunnels
+description: Learn how to add, edit, delete, and organize your WireGuard tunnel configurations in WireGuird
+---
+
+## Overview
+
+WireGuird manages WireGuard tunnel configurations stored in `/etc/wireguard/`. The tunnel list displays all `.conf` files found in this directory, providing a central location to manage your VPN connections.
+
+## Understanding the Tunnel List
+
+The tunnel list is the main interface for managing your configurations. Each tunnel displays:
+
+- **Connection status icon**: Green dot for active connections, gray dot for inactive tunnels
+- **Tunnel name**: The filename without the `.conf` extension
+
+Tunnels are displayed in alphabetical order and can be selected by clicking on them. Press **F5** to refresh the tunnel list and scan for new configuration files.
+
+<Info>
+The tunnel list automatically refreshes after adding, editing, or deleting tunnels.
+</Info>
+
+## Adding Tunnels
+
+WireGuird supports multiple methods for adding tunnel configurations to your system.
+
+### Importing Configuration Files
+
+<Steps>
+  <Step title="Open the import dialog">
+    Click the **Add Tunnel** button (button_add_tunnel) in the main window.
+  </Step>
+  
+  <Step title="Select configuration files">
+    Choose one or more files from the file picker dialog. WireGuird accepts:
+    - Individual `.conf` files
+    - `.zip` archives containing multiple configurations
+    
+    The file filter is preset to show only `*.conf` and `*.zip` files.
+  </Step>
+  
+  <Step title="Import completes automatically">
+    Selected files are copied to `/etc/wireguard/` and immediately appear in your tunnel list.
+  </Step>
+</Steps>
+
+### Multiple File Import
+
+You can select multiple `.conf` files simultaneously in the import dialog. Each file will be processed and added to your tunnel list.
+
+<Note>
+When importing a `.zip` archive, WireGuird extracts all `.conf` files from the archive and copies them to the WireGuard configuration directory.
+</Note>
+
+## Editing Tunnels
+
+The built-in editor allows you to modify tunnel configurations directly within the application.
+
+### Opening the Editor
+
+1. Select a tunnel from the tunnel list
+2. Click the **Edit Tunnel** button (button_edit_tunnel)
+3. The editor window appears with syntax highlighting
+
+### Editor Features
+
+The editor provides syntax highlighting for WireGuard configuration files:
+
+- **Section headers** (`[Interface]`, `[Peer]`) appear in green
+- **Property names** (`PrivateKey`, `PublicKey`, `Address`, `DNS`, `AllowedIPs`, `Endpoint`, `PostUp`, `PreDown`, `PreSharedKey`, `PersistentKeepalive`) appear in purple
+- The peer's **PublicKey** is extracted and displayed in a separate entry field for easy reference
+
+### Saving Changes
+
+<Steps>
+  <Step title="Modify the configuration">
+    Edit the tunnel configuration in the text view. Any changes mark the editor as modified.
+  </Step>
+  
+  <Step title="Rename the tunnel (optional)">
+    Change the tunnel name in the **editor_name** entry field. The file will be renamed when you save.
+  </Step>
+  
+  <Step title="Save or cancel">
+    - Click **Save** (editor_button_save) to write changes to `/etc/wireguard/[name].conf`
+    - Click **Cancel** (editor_button_cancel) to discard changes
+    
+    If you modified the configuration, a confirmation dialog asks if you want to cancel your changes.
+  </Step>
+</Steps>
+
+<Warning>
+Editing a tunnel that is currently active may require disconnecting and reconnecting for changes to take effect.
+</Warning>
+
+## Deleting Tunnels
+
+Removing tunnel configurations is permanent and requires confirmation.
+
+<Steps>
+  <Step title="Select the tunnel">
+    Click on the tunnel you want to remove from the tunnel list.
+  </Step>
+  
+  <Step title="Click Delete Tunnel">
+    Click the **Delete Tunnel** button (button_del_tunnel).
+  </Step>
+  
+  <Step title="Confirm deletion">
+    A confirmation dialog appears with the message: "Do you really want to delete [tunnel-name]?"
+    
+    - Click **Yes** to permanently delete the `.conf` file from `/etc/wireguard/`
+    - Click **No** to cancel
+  </Step>
+</Steps>
+
+<Warning>
+Deleting a tunnel removes its configuration file permanently. Make sure to export/backup important tunnels before deleting them.
+</Warning>
+
+## Tunnel Naming Requirements
+
+WireGuard has specific requirements for tunnel names due to Linux network interface naming limitations:
+
+### Maximum Name Length
+
+Tunnel names must be **15 characters or fewer**. This is enforced by WireGuird when you attempt to connect to a tunnel.
+
+```go
+// Source: gui/tunnels.go:217-219
+if len(name) >= 16 {
+    ShowError(window, errors.New("Tunnel's file name is too long ("+strconv.Itoa(len(name))+"), max length: 15"))
+}
+```
+
+<Note>
+This limitation comes from Linux kernel restrictions on network interface names. The tunnel name becomes the interface name (e.g., `wg0`, `office-vpn`) when the tunnel is activated.
+</Note>
+
+### Naming Best Practices
+
+- Use descriptive but concise names (e.g., `office`, `home-server`, `eu-vpn`)
+- Avoid spaces and special characters
+- Use hyphens or underscores for multi-word names
+- Keep names under 15 characters to ensure compatibility
+
+## Tunnel Configuration Format
+
+WireGuird reads standard WireGuard configuration files with the following structure:
+
+```ini
+[Interface]
+PrivateKey = <your-private-key>
+Address = 10.0.0.2/24
+DNS = 1.1.1.1
+
+[Peer]
+PublicKey = <server-public-key>
+AllowedIPs = 0.0.0.0/0
+Endpoint = vpn.example.com:51820
+PersistentKeepalive = 25
+```
+
+All standard WireGuard configuration options are supported, including `PostUp`, `PreDown`, and `PreSharedKey`.
+
+## Refreshing the Tunnel List
+
+WireGuird automatically scans for tunnels at startup and after add/edit/delete operations. To manually refresh:
+
+- Press **F5** on your keyboard while the main window is focused
+- Check the WireGuard logs for the message: "Scanning tunnels from keyboard command (F5)"
+
+This is useful if you manually add or modify `.conf` files in `/etc/wireguard/` outside of WireGuird.

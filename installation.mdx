@@ -1,0 +1,438 @@
+---
+title: Installation
+description: Complete installation guide for WireGuird on Ubuntu and Linux Mint
+---
+
+## System Requirements
+
+WireGuird requires the following to run properly:
+
+- **Operating System**: Ubuntu 18.04+, Linux Mint 21.1+, or compatible Debian-based distribution
+- **Desktop Environment**: GNOME, XFCE, KDE, or any DE with system tray support
+- **Root Access**: Required for managing WireGuard tunnels
+- **Dependencies**: GTK+3, WireGuard tools, and system libraries
+
+<Warning>
+WireGuird controls WireGuard through `wg-quick` commands, which require root privileges. You'll need to run the application with `sudo` or configure appropriate permissions.
+</Warning>
+
+## Installation Methods
+
+Choose the installation method that best suits your needs:
+
+<Tabs>
+  <Tab title="Pre-built Package (Recommended)">
+    ### Download Pre-built .deb Package
+
+    The easiest way to install WireGuird is using the pre-built `.deb` package for your Ubuntu version.
+
+    <Steps>
+      <Step title="Choose Your Version">
+        Select the appropriate package for your Ubuntu/Linux Mint version:
+
+        **v1.1.0** - For Ubuntu 23.04:
+        ```bash
+        wget https://github.com/UnnoTed/wireguird/releases/download/v1.1.0/wireguird_amd64.deb
+        ```
+
+        **v1.0.0** - For Ubuntu 22.04 LTS, 22.10, and Linux Mint 21.1:
+        ```bash
+        wget https://github.com/UnnoTed/wireguird/releases/download/v1.0.0/wireguird_amd64.deb
+        ```
+
+        **v0.2.0** - For Ubuntu 18.04 LTS, 20.04 LTS, and 21.04:
+        ```bash
+        wget https://github.com/UnnoTed/wireguird/releases/download/v0.2.0/wireguird_amd64.deb
+        ```
+
+        <Info>
+        Each release is tested specifically for the listed Ubuntu versions. Using the correct version ensures compatibility with your system's GTK libraries.
+        </Info>
+      </Step>
+
+      <Step title="Install the Package">
+        Install the downloaded `.deb` package using `dpkg`:
+
+        ```bash
+        sudo dpkg -i ./wireguird_amd64.deb
+        ```
+
+        If you encounter dependency errors, resolve them with:
+
+        ```bash
+        sudo apt-get install -f
+        ```
+
+        This command installs any missing dependencies automatically.
+      </Step>
+
+      <Step title="Verify Installation">
+        Check that WireGuird is installed correctly:
+
+        ```bash
+        which wireguird
+        ```
+
+        You should see the path to the installed binary, typically `/usr/local/bin/wireguird` or `/usr/bin/wireguird`.
+      </Step>
+    </Steps>
+
+    ### What Gets Installed
+
+    The `.deb` package installs:
+
+    - **Binary**: The WireGuird executable
+    - **Icons**: Application icons in `/opt/wireguird/Icon/`
+    - **Desktop Entry**: `.desktop` file for application launcher
+    - **Dependencies**: All required system libraries
+
+  </Tab>
+
+  <Tab title="Build from Source">
+    ### Compile WireGuird from Source
+
+    Building from source gives you the latest code and allows customization.
+
+    <Steps>
+      <Step title="Install Build Dependencies">
+        First, install all required development libraries and tools:
+
+        **For Ubuntu/Debian:**
+        ```bash
+        sudo apt install wireguard-tools libgtk-3-dev libayatana-appindicator3-dev golang-go resolvconf
+        ```
+
+        **For Linux Mint:**
+        ```bash
+        sudo apt install wireguard-tools libgtk-3-dev libayatana-appindicator3-dev golang-go resolvconf
+        ```
+
+        <Note>
+        These dependencies are defined in `deps.sh` and are required for both building and running WireGuird.
+        </Note>
+
+        **Dependency Breakdown:**
+        - `wireguard-tools`: Provides `wg` and `wg-quick` commands
+        - `libgtk-3-dev`: GTK+3 development headers
+        - `libayatana-appindicator3-dev`: System tray support library
+        - `golang-go`: Go compiler (1.16+ recommended)
+        - `resolvconf`: DNS management utility
+      </Step>
+
+      <Step title="Clone the Repository">
+        Download the WireGuird source code:
+
+        ```bash
+        git clone https://github.com/UnnoTed/wireguird
+        cd wireguird
+        ```
+      </Step>
+
+      <Step title="Install Dependencies with Script">
+        Run the automated dependency installer:
+
+        ```bash
+        chmod +x ./*.sh
+        ./deps.sh
+        ```
+
+        This script detects your distribution and installs the correct packages.
+      </Step>
+
+      <Step title="Build the Package">
+        Create the `.deb` package:
+
+        ```bash
+        ./package.sh
+        ```
+
+        The build process:
+        1. Generates GTK bindings (gui/get/generator/generator.go)
+        2. Embeds static assets using fileb0x
+        3. Compiles the Go source code
+        4. Creates a `.deb` package in `./build/`
+
+        <Info>
+        The package script automatically detects your distribution (Ubuntu/Fedora) and uses the appropriate packaging format.
+        </Info>
+      </Step>
+
+      <Step title="Install the Built Package">
+        Install your freshly built package:
+
+        ```bash
+        ./install.sh
+        ```
+
+        Or manually:
+
+        ```bash
+        sudo dpkg -i ./build/wireguird_amd64.deb
+        ```
+      </Step>
+    </Steps>
+
+    ### Build Troubleshooting
+
+    <AccordionGroup>
+      <Accordion title="Go version too old">
+        If you see errors about Go version:
+
+        ```bash
+        go version
+        ```
+
+        WireGuird requires Go 1.16 or later. On older Ubuntu versions, install a newer Go:
+
+        ```bash
+        sudo add-apt-repository ppa:longsleep/golang-backports
+        sudo apt update
+        sudo apt install golang-go
+        ```
+      </Accordion>
+
+      <Accordion title="GTK bindings error">
+        If you encounter GTK-related build errors:
+
+        ```bash
+        sudo apt install pkg-config libgtk-3-dev
+        ```
+
+        Ensure `pkg-config` can find GTK:
+
+        ```bash
+        pkg-config --modversion gtk+-3.0
+        ```
+      </Accordion>
+
+      <Accordion title="Missing fileb0x">
+        If the build fails on static asset embedding:
+
+        ```bash
+        go install github.com/UnnoTed/fileb0x@latest
+        ```
+
+        Ensure `$GOPATH/bin` is in your `PATH`.
+      </Accordion>
+    </AccordionGroup>
+
+  </Tab>
+</Tabs>
+
+## Post-Installation Setup
+
+### Prepare WireGuard Directory
+
+WireGuird reads tunnel configurations from `/etc/wireguard/`. Ensure this directory exists with proper permissions:
+
+```bash
+sudo mkdir -p /etc/wireguard
+sudo chmod 700 /etc/wireguard
+```
+
+<Warning>
+The `/etc/wireguard/` directory should have `700` permissions (read/write/execute for root only) to protect your VPN configuration and private keys.
+</Warning>
+
+### Configure WireGuard
+
+If you don't have WireGuard configured yet:
+
+<Steps>
+  <Step title="Enable WireGuard Kernel Module">
+    Ensure the WireGuard kernel module is loaded:
+
+    ```bash
+    sudo modprobe wireguard
+    ```
+
+    Verify it's loaded:
+
+    ```bash
+    lsmod | grep wireguard
+    ```
+  </Step>
+
+  <Step title="Test wg-quick">
+    Verify `wg-quick` is available:
+
+    ```bash
+    wg-quick --version
+    ```
+
+    This command is used by WireGuird to manage tunnels (gui/tunnels.go:232, 286).
+  </Step>
+</Steps>
+
+### First Launch
+
+Launch WireGuird for the first time:
+
+```bash
+sudo wireguird
+```
+
+<Note>
+WireGuird must be run with `sudo` because it executes `wg-quick` commands that require root privileges to modify network interfaces.
+</Note>
+
+**Alternative Launch Methods:**
+
+1. **From Application Menu**: Search for "Wireguird" in your application launcher
+2. **Desktop Entry**: Click the WireGuird icon if your DE auto-detected it
+3. **System Tray**: If "Start on Tray" is enabled, the application launches minimized
+
+### Create Desktop Launcher with sudo
+
+To avoid typing `sudo` each time, create a desktop launcher:
+
+```bash
+sudo nano /usr/share/applications/wireguird.desktop
+```
+
+Add the following content:
+
+```ini
+[Desktop Entry]
+Name=Wireguird
+Comment=WireGuard VPN Manager
+Exec=pkexec wireguird
+Icon=/opt/wireguird/Icon/wireguard_off.png
+Terminal=false
+Type=Application
+Categories=Network;VPN;
+```
+
+<Info>
+`pkexec` provides a graphical password prompt, making it easier to launch WireGuird with root privileges from the application menu.
+</Info>
+
+## Updating WireGuird
+
+### Check for Updates
+
+WireGuird can automatically check for updates (configurable in Settings). When an update is available, you'll see a notification dialog (gui/gui.go:168-201).
+
+### Manual Update
+
+<Steps>
+  <Step title="Download New Version">
+    Download the latest `.deb` package for your Ubuntu version from the [releases page](https://github.com/UnnoTed/wireguird/releases).
+  </Step>
+
+  <Step title="Stop Running Instance">
+    Close WireGuird and ensure it's not running:
+
+    ```bash
+    pkill wireguird
+    ```
+  </Step>
+
+  <Step title="Install Update">
+    Install the new package (it will automatically upgrade):
+
+    ```bash
+    sudo dpkg -i ./wireguird_amd64.deb
+    ```
+  </Step>
+</Steps>
+
+## Uninstallation
+
+To remove WireGuird from your system:
+
+```bash
+sudo apt remove wireguird
+```
+
+To also remove configuration files:
+
+```bash
+sudo apt purge wireguird
+```
+
+<Note>
+Uninstalling WireGuird does not remove your WireGuard tunnel configurations in `/etc/wireguard/` or the WireGuard kernel module.
+</Note>
+
+## Troubleshooting Installation
+
+<AccordionGroup>
+  <Accordion title="Package dependency errors">
+    If you see dependency errors during installation:
+
+    ```bash
+    sudo apt-get install -f
+    sudo apt update
+    sudo apt upgrade
+    ```
+
+    This resolves missing dependencies and updates your package list.
+  </Accordion>
+
+  <Accordion title="Application won't launch">
+    Check if all dependencies are installed:
+
+    ```bash
+    ldd $(which wireguird)
+    ```
+
+    Look for any "not found" entries. Install missing libraries with:
+
+    ```bash
+    sudo apt install libgtk-3-0 libayatana-appindicator3-1
+    ```
+  </Accordion>
+
+  <Accordion title="No system tray icon">
+    Some desktop environments require additional packages for system tray support:
+
+    **GNOME:**
+    ```bash
+    sudo apt install gnome-shell-extension-appindicator
+    ```
+
+    **KDE Plasma:**
+    System tray support is built-in, but ensure the system tray widget is added to your panel.
+  </Accordion>
+
+  <Accordion title="Permission denied errors">
+    If you see "Permission denied" when trying to activate tunnels:
+
+    1. Ensure you launched WireGuird with `sudo` or `pkexec`
+    2. Check `/etc/wireguard/` permissions:
+       ```bash
+       ls -la /etc/wireguard/
+       ```
+    3. Verify `wg-quick` is executable:
+       ```bash
+       which wg-quick
+       ls -la $(which wg-quick)
+       ```
+  </Accordion>
+</AccordionGroup>
+
+## Distribution-Specific Notes
+
+### Ubuntu 22.04 LTS and Later
+
+Ubuntu 22.04+ includes WireGuard in the default repositories with full kernel support. No additional repositories needed.
+
+### Ubuntu 18.04 LTS and 20.04 LTS
+
+WireGuard is available but may require backports:
+
+```bash
+sudo apt install linux-headers-$(uname -r)
+sudo apt install wireguard
+```
+
+### Linux Mint 21.1
+
+Linux Mint 21.1 is based on Ubuntu 22.04 LTS and has full WireGuard support out of the box.
+
+## Next Steps
+
+<Card title="Quick Start Guide" icon="rocket" href="/quickstart">
+  Now that WireGuird is installed, learn how to add your first tunnel and connect to a VPN in under 5 minutes.
+</Card>

@@ -1,0 +1,389 @@
+---
+title: Importing and Exporting Tunnels
+description: Learn how to import WireGuard configuration files, extract from zip archives, and export your tunnels for backup or migration
+---
+
+## Overview
+
+WireGuird provides built-in tools for importing WireGuard configuration files and exporting your tunnel collection as zip archives. This makes it easy to backup your VPN configurations or migrate them between systems.
+
+## Importing Configuration Files
+
+WireGuird supports importing both individual configuration files and zip archives containing multiple tunnels.
+
+### Supported Import Formats
+
+- **`.conf` files**: Standard WireGuard configuration format
+- **`.zip` archives**: Compressed files containing one or more `.conf` files
+
+Both formats can be imported through the same dialog interface.
+
+### Import Process
+
+<Steps>
+  <Step title="Open the import dialog">
+    Click the **Add Tunnel** button in the main WireGuird window.
+    
+    A native file chooser dialog opens with the title: "Wireguird - Choose tunnel files (*.conf, *.zip)"
+  </Step>
+  
+  <Step title="Select files">
+    The file picker is pre-filtered to show only:
+    - Files ending in `.conf`
+    - Files ending in `.zip`
+    
+    You can select multiple files simultaneously by using:
+    - **Ctrl+Click** to select multiple individual files
+    - **Shift+Click** to select a range of files
+  </Step>
+  
+  <Step title="Confirm import">
+    Click **OK** to import the selected files.
+    
+    WireGuird processes each file:
+    - `.conf` files are copied directly to `/etc/wireguard/`
+    - `.zip` archives are extracted (see below)
+  </Step>
+  
+  <Step title="Verify import">
+    The tunnel list automatically refreshes, and imported tunnels appear in alphabetical order.
+  </Step>
+</Steps>
+
+```go
+// Source: gui/tunnels.go:346-405
+btnAddTunnel.Connect("clicked", func() {
+    dialog, err := gtk.FileChooserNativeDialogNew(
+        "Wireguird - Choose tunnel files (*.conf, *.zip)", 
+        window, 
+        gtk.FILE_CHOOSER_ACTION_OPEN, 
+        "OK", 
+        "Cancel"
+    )
+    
+    filter, err := gtk.FileFilterNew()
+    filter.AddPattern("*.conf")
+    filter.AddPattern("*.zip")
+    filter.SetName("*.conf / *.zip")
+    
+    dialog.AddFilter(filter)
+    dialog.SetSelectMultiple(true)
+    
+    // ... processing logic
+})
+```
+
+<Info>
+Imported configuration files are copied to `/etc/wireguard/`, the standard location for WireGuard configurations on Linux. The original files remain unchanged.
+</Info>
+
+## Importing from Zip Archives
+
+Zip archives are particularly useful for importing multiple tunnel configurations at once.
+
+### Zip Archive Structure
+
+WireGuird extracts all `.conf` files from zip archives, regardless of their directory structure:
+
+```
+tunnels.zip
+├── office.conf          ← Extracted
+├── home.conf            ← Extracted
+├── subfolder/
+│   └── server.conf      ← Extracted
+└── README.txt           ← Ignored (not .conf)
+```
+
+### Extraction Process
+
+When you import a zip file:
+
+<Steps>
+  <Step title="Archive is opened">
+    WireGuird opens the zip archive and scans all files inside.
+  </Step>
+  
+  <Step title=".conf files are identified">
+    Only files ending in `.conf` are processed. Other files are ignored.
+  </Step>
+  
+  <Step title="Files are extracted">
+    Each `.conf` file is extracted and written to `/etc/wireguard/` with its original filename.
+  </Step>
+  
+  <Step title="Tunnel list updates">
+    All extracted tunnels appear in the tunnel list immediately.
+  </Step>
+</Steps>
+
+```go
+// Source: gui/tunnels.go:1167-1196
+func parseZipArchive(target string) error {
+    rc, err := zip.OpenReader(target)
+    if err != nil {
+        return err
+    }
+    defer rc.Close()
+    
+    for _, f := range rc.File {
+        // parse only .conf files from zip archive
+        if !f.FileInfo().IsDir() && strings.HasSuffix(f.FileInfo().Name(), ".conf") {
+            fr, err := f.Open()
+            if err != nil {
+                return err
+            }
+            defer fr.Close()
+            
+            data, err := ioutil.ReadAll(fr)
+            if err != nil {
+                return err
+            }
+            
+            err = ioutil.WriteFile(filepath.Join(TunnelsPath, f.FileInfo().Name()), data, 666)
+            if err != nil {
+                return err
+            }
+        }
+    }
+    
+    return nil
+}
+```
+
+<Note>
+Directory structure within the zip archive is not preserved. All `.conf` files are extracted directly to `/etc/wireguard/` using their filename only.
+</Note>
+
+### Handling Duplicate Names
+
+If you import a `.conf` file with the same name as an existing tunnel:
+
+- The existing file will be overwritten
+- No confirmation dialog is shown
+- Make sure to backup important configurations before importing
+
+<Warning>
+Importing a configuration file with an existing name will silently overwrite the existing file in `/etc/wireguard/`. Always export/backup your tunnels before bulk importing.
+</Warning>
+
+## Exporting Tunnels
+
+WireGuird can export all your tunnel configurations as a single zip archive for backup or migration purposes.
+
+### Export Process
+
+<Steps>
+  <Step title="Click Export button">
+    Click the **Zip Tunnels** button (button_zip_tunnel) in the main window.
+    
+    A save dialog opens with the title: "Wireguird - zip tunnels -> Save zip file"
+  </Step>
+  
+  <Step title="Choose save location">
+    Navigate to your desired save location and optionally modify the filename.
+    
+    Default filename format: `wg_tunnels_[day]_[month]_[year].zip`
+    
+    Example: `wg_tunnels_5_March_2026.zip`
+  </Step>
+  
+  <Step title="Confirm overwrite (if needed)">
+    If a file with the same name exists, a confirmation dialog asks if you want to overwrite it.
+  </Step>
+  
+  <Step title="Export completes">
+    WireGuird creates a zip archive containing all `.conf` files from `/etc/wireguard/`.
+  </Step>
+</Steps>
+
+### What Gets Exported
+
+The export function creates a complete backup of your tunnel configurations:
+
+- **All `.conf` files** in `/etc/wireguard/` are included
+- Files maintain their original names
+- File permissions are preserved
+- The zip archive is organized with all configs in a single directory
+
+```go
+// Source: gui/tunnels.go:462-537
+btnZipTunnels.Connect("clicked", func() {
+    d, err := gtk.FileChooserDialogNewWith2Buttons(
+        "Wireguird - zip tunnels -> Save zip file", 
+        window, 
+        gtk.FILE_CHOOSER_ACTION_SAVE, 
+        "Cancel", 
+        gtk.RESPONSE_CANCEL, 
+        "Save", 
+        gtk.RESPONSE_ACCEPT
+    )
+    
+    d.SetDoOverwriteConfirmation(true)
+    t := time.Now()
+    d.SetCurrentName(fmt.Sprint("wg_tunnels_", t.Day(), "_", t.Month(), "_", t.Year(), ".zip"))
+    
+    // ... walks through TunnelsPath and creates archive
+})
+```
+
+### Archive Structure
+
+The exported zip file has the following structure:
+
+```
+wg_tunnels_5_March_2026.zip
+└── wg_tunnels_5_March_2026/
+    ├── office.conf
+    ├── home.conf
+    ├── eu-server.conf
+    └── backup-vpn.conf
+```
+
+<Info>
+The zip archive contains a root directory named after the zip file (without extension), with all configuration files inside. This structure is compatible with WireGuird's import function.
+</Info>
+
+## Backup Best Practices
+
+### Regular Backups
+
+Create regular backups of your tunnel configurations:
+
+1. **Before major changes**: Export before editing multiple tunnels
+2. **After adding tunnels**: Backup when you add new VPN connections
+3. **Periodic snapshots**: Create monthly or weekly backups for peace of mind
+
+### Backup Storage
+
+<Tabs>
+  <Tab title="Local Storage">
+    Store zip exports on:
+    - External USB drives
+    - Network-attached storage (NAS)
+    - Separate partitions or drives
+    
+    **Pros**: Fast, full control, no internet required
+    
+    **Cons**: Vulnerable to hardware failure, not accessible remotely
+  </Tab>
+  
+  <Tab title="Cloud Storage">
+    Upload zip exports to:
+    - Encrypted cloud storage services
+    - Private cloud servers
+    - Version-controlled repositories (if encrypted)
+    
+    **Pros**: Remote access, protection from hardware failure
+    
+    **Cons**: Requires internet, potential security risks if not encrypted
+  </Tab>
+</Tabs>
+
+<Warning>
+WireGuard configuration files contain private keys and sensitive information. Always encrypt your exported zip files before storing them in the cloud or on shared systems.
+</Warning>
+
+### Encrypting Exports
+
+To securely store your exported tunnels:
+
+```bash
+# Encrypt the exported zip with GPG
+gpg --symmetric --cipher-algo AES256 wg_tunnels_5_March_2026.zip
+
+# This creates: wg_tunnels_5_March_2026.zip.gpg
+# You can safely store this encrypted file
+
+# To decrypt later:
+gpg --decrypt wg_tunnels_5_March_2026.zip.gpg > wg_tunnels_5_March_2026.zip
+```
+
+Alternatively, use encrypted storage solutions or password-protected zip utilities.
+
+## Migrating Between Systems
+
+Use export and import to move your tunnel configurations to a new machine:
+
+<Steps>
+  <Step title="Export from old system">
+    1. Open WireGuird on your current system
+    2. Click **Zip Tunnels** and save the archive
+    3. Copy the zip file to your new system (USB drive, cloud, network transfer)
+  </Step>
+  
+  <Step title="Install WireGuird on new system">
+    Follow the installation instructions for your Linux distribution.
+  </Step>
+  
+  <Step title="Import to new system">
+    1. Open WireGuird on the new system
+    2. Click **Add Tunnel**
+    3. Select your exported zip archive
+    4. All tunnels appear in the tunnel list
+  </Step>
+  
+  <Step title="Verify configurations">
+    Select each tunnel and verify the configuration details are correct.
+  </Step>
+</Steps>
+
+<Note>
+WireGuard configurations are portable between Linux systems. However, some configurations with system-specific `PostUp` or `PreDown` commands may need adjustment on the new system.
+</Note>
+
+## Manual Import/Export
+
+Advanced users can also manage configurations manually:
+
+### Manual Import
+
+```bash
+# Copy configuration files directly to WireGuard directory
+sudo cp /path/to/your/config.conf /etc/wireguard/
+
+# Set appropriate permissions
+sudo chmod 600 /etc/wireguard/config.conf
+
+# Press F5 in WireGuird to refresh the tunnel list
+```
+
+### Manual Export
+
+```bash
+# Copy all configs to a backup directory
+sudo cp /etc/wireguard/*.conf ~/wireguard-backup/
+
+# Create a zip archive
+cd ~/wireguard-backup
+zip -r wg-backup-$(date +%Y%m%d).zip *.conf
+```
+
+<Info>
+WireGuird automatically detects configuration files in `/etc/wireguard/` regardless of how they were added. Press F5 to refresh the tunnel list after manual changes.
+</Info>
+
+## Troubleshooting Import/Export Issues
+
+### Import Fails
+
+If import doesn't work:
+
+- **Check file permissions**: Ensure WireGuird has write access to `/etc/wireguard/`
+- **Verify file format**: Make sure files are valid WireGuard `.conf` format
+- **Check zip structure**: Ensure the zip contains `.conf` files (not just folders)
+- **Look for errors**: Check the WireGuard logs panel for error messages
+
+### Export Fails
+
+If export doesn't work:
+
+- **Check destination permissions**: Ensure you have write access to the save location
+- **Verify disk space**: Ensure sufficient space for the zip archive
+- **Check source files**: Ensure `/etc/wireguard/` contains `.conf` files
+
+### Missing Tunnels After Import
+
+- Press **F5** to manually refresh the tunnel list
+- Check `/etc/wireguard/` to verify files were copied
+- Ensure filenames end in `.conf` (case-sensitive)
+- Check file permissions: `ls -la /etc/wireguard/`

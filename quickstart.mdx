@@ -1,80 +1,573 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quick Start
+description: Get started with WireGuird in 5 minutes
 ---
 
-## Get started in three steps
+## Overview
 
-Get your documentation site running locally and make your first customization.
+This quick start guide will have you managing WireGuard VPN tunnels with WireGuird in just a few minutes. We'll cover launching the application, adding a tunnel, and establishing your first connection.
 
-### Step 1: Set up your local environment
+<Info>
+Before starting, ensure you have [installed WireGuird](/installation) and have at least one WireGuard configuration file (`.conf`) ready.
+</Info>
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+## Launch WireGuird
 
-### Step 2: Deploy your changes
+<Steps>
+  <Step title="Start the Application">
+    Launch WireGuird with root privileges (required for managing WireGuard tunnels):
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+    ```bash
+    sudo wireguird
+    ```
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+    Or use the application launcher with graphical authentication:
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+    ```bash
+    pkexec wireguird
+    ```
 
-### Step 3: Go live
+    <Note>
+    WireGuird requires root access because it executes `wg-quick` commands that modify network interfaces (gui/tunnels.go:232, 286).
+    </Note>
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+    **First Launch Appearance:**
+    - Main window with an empty tunnel list
+    - System tray icon (black = disconnected)
+    - Header showing "Not connected!"
+  </Step>
 
-## Next steps
+  <Step title="Verify System Tray Icon">
+    Look for the WireGuird icon in your system tray:
 
-Now that you have your docs running, explore these key features:
+    - **Black icon**: No active tunnels
+    - **Red icon**: One or more tunnels active
+
+    Right-click the icon for quick access:
+    - **Show**: Display the main window
+    - **Quit**: Exit the application
+
+    <Info>
+    The system tray integration uses Ayatana AppIndicator (main.go:60) for broad compatibility across desktop environments.
+    </Info>
+  </Step>
+</Steps>
+
+## Add Your First Tunnel
+
+WireGuird manages tunnels stored in `/etc/wireguard/`. You can add tunnels in several ways:
+
+<Tabs>
+  <Tab title="Import Configuration File">
+    ### Import from File Browser
+
+    <Steps>
+      <Step title="Click Add Tunnel Button">
+        In the main window, click the **"Add Tunnel"** button (+ icon) in the toolbar.
+
+        This opens a file chooser dialog (gui/tunnels.go:349).
+      </Step>
+
+      <Step title="Select Configuration File(s)">
+        Navigate to your WireGuard configuration file(s):
+
+        - **Single file**: Select one `.conf` file
+        - **Multiple files**: Hold Ctrl and select multiple `.conf` files
+        - **ZIP archive**: Select a `.zip` containing multiple `.conf` files
+
+        <Info>
+        WireGuird supports importing multiple tunnel configurations at once. ZIP archives are automatically extracted, and all `.conf` files are imported (gui/tunnels.go:375-396).
+        </Info>
+      </Step>
+
+      <Step title="Confirm Import">
+        Click **"OK"** in the file dialog.
+
+        The configuration files are copied to `/etc/wireguard/` with proper permissions (gui/tunnels.go:388).
+
+        Your tunnel(s) now appear in the tunnel list on the left side of the main window.
+      </Step>
+    </Steps>
+
+    **What Happens During Import:**
+    1. File is read from your selected location
+    2. Content is validated as a proper WireGuard configuration
+    3. File is copied to `/etc/wireguard/<filename>.conf`
+    4. Permissions are set to 666 (readable/writable)
+    5. Tunnel list is refreshed automatically
+
+  </Tab>
+
+  <Tab title="Copy Configuration Manually">
+    ### Manual File Copy
+
+    If you prefer command-line management:
+
+    <Steps>
+      <Step title="Copy Configuration to /etc/wireguard/">
+        ```bash
+        sudo cp ~/path/to/your/tunnel.conf /etc/wireguard/
+        ```
+
+        Or create a new configuration file:
+
+        ```bash
+        sudo nano /etc/wireguard/myvpn.conf
+        ```
+      </Step>
+
+      <Step title="Set Proper Permissions">
+        Ensure the configuration file has appropriate permissions:
+
+        ```bash
+        sudo chmod 600 /etc/wireguard/myvpn.conf
+        ```
+
+        <Warning>
+        Configuration files contain private keys. Always restrict permissions to prevent unauthorized access.
+        </Warning>
+      </Step>
+
+      <Step title="Refresh Tunnel List">
+        In WireGuird, press **F5** to refresh the tunnel list (gui/tunnels.go:88-93).
+
+        Or restart the application to detect new configurations.
+      </Step>
+    </Steps>
+
+  </Tab>
+
+  <Tab title="Create New Configuration">
+    ### Create Configuration with WireGuird Editor
+
+    <Steps>
+      <Step title="Create Empty Configuration">
+        First, create an empty configuration file:
+
+        ```bash
+        sudo touch /etc/wireguard/newtunnel.conf
+        sudo chmod 600 /etc/wireguard/newtunnel.conf
+        ```
+      </Step>
+
+      <Step title="Open in WireGuird">
+        1. Press **F5** in WireGuird to refresh the tunnel list
+        2. Select "newtunnel" from the list
+        3. Click the **"Edit"** button (pencil icon)
+      </Step>
+
+      <Step title="Enter Configuration">
+        The editor window opens with syntax highlighting (gui/tunnels.go:615-659).
+
+        Enter your WireGuard configuration:
+
+        ```ini
+        [Interface]
+        PrivateKey = <your-private-key>
+        Address = 10.0.0.2/24
+        DNS = 1.1.1.1
+
+        [Peer]
+        PublicKey = <peer-public-key>
+        Endpoint = vpn.example.com:51820
+        AllowedIPs = 0.0.0.0/0
+        PersistentKeepalive = 25
+        ```
+
+        <Note>
+        The editor provides syntax highlighting for WireGuard properties and sections, making it easier to spot errors.
+        </Note>
+      </Step>
+
+      <Step title="Save Configuration">
+        1. Review your configuration
+        2. Click **"Save"** button
+        3. The tunnel is now ready to activate
+
+        If you want to rename the tunnel, edit the name field at the top of the editor before saving (gui/tunnels.go:729-749).
+      </Step>
+    </Steps>
+
+  </Tab>
+</Tabs>
+
+## Connect to a Tunnel
+
+<Steps>
+  <Step title="Select a Tunnel">
+    In the main window, click on a tunnel name in the left sidebar.
+
+    The right panel displays tunnel details:
+
+    **Interface Information:**
+    - Status: Inactive
+    - Addresses: IP addresses from config
+    - DNS Servers: DNS configuration
+
+    **Peer Information:**
+    - Public Key: Remote peer's public key
+    - Endpoint: Server address and port
+    - Allowed IPs: Routed IP ranges
+  </Step>
+
+  <Step title="Activate the Tunnel">
+    Click the **"Activate"** button in the interface section.
+
+    **What Happens:**
+    1. WireGuird executes `sudo wg-quick up <tunnel-name>` (gui/tunnels.go:286)
+    2. WireGuard creates a network interface
+    3. Routes are configured based on AllowedIPs
+    4. DNS settings are applied (if configured)
+
+    <Info>
+    If "Multiple Tunnels" is disabled in Settings, activating a tunnel automatically disconnects any currently active tunnels (gui/tunnels.go:249-268).
+    </Info>
+
+    **Success Indicators:**
+    - Button label changes to **"Deactivate"**
+    - Status changes to **"Active"**
+    - System tray icon turns **red**
+    - Green indicator appears next to tunnel name
+    - Header shows "Connected to [tunnel-name]"
+  </Step>
+
+  <Step title="Monitor Connection">
+    Once connected, real-time statistics update every second:
+
+    **Interface Stats:**
+    - Public Key: Your interface's public key
+    - Listen Port: UDP port for incoming connections
+
+    **Peer Stats:**
+    - Latest Handshake: Time since last handshake (e.g., "2 minutes ago")
+    - Transfer: Received and sent bytes in human-readable format
+
+    <Note>
+    Statistics only update when the WireGuird window has focus to conserve resources (gui/tunnels.go:837).
+    </Note>
+  </Step>
+
+  <Step title="Test Your Connection">
+    Verify your VPN connection is working:
+
+    ```bash
+    # Check tunnel interface exists
+    ip addr show <tunnel-name>
+
+    # View WireGuard status
+    sudo wg show
+
+    # Test connectivity
+    ping 10.0.0.1  # Replace with your VPN gateway IP
+
+    # Check public IP (if tunneling all traffic)
+    curl ifconfig.me
+    ```
+  </Step>
+</Steps>
+
+## Disconnect from a Tunnel
+
+<Steps>
+  <Step title="Select Active Tunnel">
+    Click on the active tunnel in the left sidebar (marked with a green indicator).
+  </Step>
+
+  <Step title="Click Deactivate">
+    Click the **"Deactivate"** button.
+
+    **What Happens:**
+    1. WireGuird executes `sudo wg-quick down <tunnel-name>` (gui/tunnels.go:232)
+    2. Network interface is removed
+    3. Routes are cleaned up
+    4. DNS settings are restored
+
+    **Success Indicators:**
+    - Button label changes back to **"Activate"**
+    - Status changes to **"Inactive"**
+    - System tray icon turns **black**
+    - Gray indicator appears next to tunnel name
+    - Header shows "Not connected!"
+  </Step>
+</Steps>
+
+## Essential Features
+
+### Keyboard Shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| **F5** | Refresh tunnel list (gui/tunnels.go:88) |
+
+### Toolbar Buttons
 
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="Add Tunnel" icon="plus">
+    Import `.conf` files or `.zip` archives containing tunnel configurations.
+  </Card>
+  
+  <Card title="Edit Tunnel" icon="pen">
+    Open the built-in editor to modify the selected tunnel's configuration with syntax highlighting.
+  </Card>
+  
+  <Card title="Delete Tunnel" icon="trash">
+    Remove the selected tunnel configuration from `/etc/wireguard/` (prompts for confirmation).
+  </Card>
+  
+  <Card title="Export Tunnels" icon="file-zipper">
+    Export all tunnel configurations to a dated ZIP archive for backup (gui/tunnels.go:462-537).
+  </Card>
 </CardGroup>
 
+### Application Menu
+
+Click the **menu button** (hamburger icon) in the header to access:
+
+- **Settings**: Configure application behavior
+- **VERSION: v1.1.0**: View version and open GitHub repository (gui/tunnels.go:125)
+
+## Configuration Settings
+
+Access Settings from the application menu to customize WireGuird:
+
+### Multiple Active Tunnels
+
+<Tabs>
+  <Tab title="Disabled (Default)">
+    **Single Tunnel Mode**
+
+    When disabled, activating a new tunnel automatically disconnects any active tunnels.
+
+    **Best for:**
+    - Users who only need one VPN connection at a time
+    - Preventing routing conflicts
+    - Simpler connection management
+  </Tab>
+
+  <Tab title="Enabled">
+    **Multiple Tunnel Mode**
+
+    When enabled, you can run multiple WireGuard tunnels simultaneously.
+
+    **Best for:**
+    - Advanced routing scenarios
+    - Connecting to multiple networks
+    - Split tunneling setups
+
+    <Warning>
+    Running multiple tunnels requires careful route configuration to avoid conflicts. Ensure your AllowedIPs don't overlap.
+    </Warning>
+  </Tab>
+</Tabs>
+
+### Start on Tray
+
+When enabled, WireGuird launches minimized to the system tray instead of showing the main window (main.go:147).
+
+**Useful for:**
+- Automatic startup at login
+- Keeping the application running in background
+- Quick access from system tray
+
+### Check for Updates
+
+When enabled, WireGuird automatically checks for new releases:
+- First check: 60 seconds after launch
+- Subsequent checks: Every 24 hours
+- Notification dialog when updates are available
+
+<Info>
+Settings are saved to `./wireguird.settings` in JSON format (settings/settings.go:12, 44-56).
+</Info>
+
+## Common Tasks
+
+<AccordionGroup>
+  <Accordion title="Import tunnels from another computer">
+    <Steps>
+      <Step title="Export on source computer">
+        Click the **Export** button (zip icon) in WireGuird toolbar.
+        
+        Save the ZIP file (e.g., `wg_tunnels_5_Mar_2026.zip`).
+      </Step>
+
+      <Step title="Transfer to destination computer">
+        Copy the ZIP file to your other computer via USB, network, or cloud storage.
+      </Step>
+
+      <Step title="Import on destination computer">
+        In WireGuird, click **Add Tunnel** and select the ZIP file.
+        
+        All tunnel configurations are automatically extracted and imported.
+      </Step>
+    </Steps>
+  </Accordion>
+
+  <Accordion title="Rename a tunnel">
+    <Steps>
+      <Step title="Open editor">
+        Select the tunnel and click the **Edit** button.
+      </Step>
+
+      <Step title="Change name">
+        Edit the name field at the top of the editor window (gui/tunnels.go:729).
+      </Step>
+
+      <Step title="Save">
+        Click **Save**. The configuration file is renamed automatically (gui/tunnels.go:741-749).
+      </Step>
+    </Steps>
+
+    <Warning>
+    Tunnel names must be 15 characters or less due to Linux interface naming limitations (gui/tunnels.go:217).
+    </Warning>
+  </Accordion>
+
+  <Accordion title="View connection logs">
+    WireGuird displays connection logs at the bottom of the main window:
+
+    - **Timestamp**: When the event occurred
+    - **Level**: INFO or ERROR (errors in red)
+    - **Message**: Description of the event
+
+    **Log Events:**
+    - Tunnel activation/deactivation
+    - Connection errors
+    - wg-quick command output
+
+    Logs are stored in memory and cleared when the application restarts (gui/tunnels.go:1140-1165).
+  </Accordion>
+
+  <Accordion title="Check tunnel configuration is valid">
+    Before activating, verify your configuration:
+
+    ```bash
+    sudo wg-quick up <tunnel-name> --dry-run
+    ```
+
+    Or use the WireGuard config validator:
+
+    ```bash
+    sudo wg show <tunnel-name>
+    ```
+
+    Common configuration issues:
+    - Missing or invalid PrivateKey
+    - Malformed Endpoint (must be `host:port`)
+    - Invalid IP addresses in Address or AllowedIPs
+    - Missing [Interface] or [Peer] sections
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Can't activate tunnel - Permission denied">
+    **Cause**: WireGuird wasn't launched with root privileges.
+
+    **Solution**:
+    ```bash
+    sudo wireguird
+    # or
+    pkexec wireguird
+    ```
+
+    WireGuard requires root to create network interfaces.
+  </Accordion>
+
+  <Accordion title="Tunnel activates but no internet connection">
+    **Cause**: DNS or routing configuration issue.
+
+    **Check DNS**:
+    ```bash
+    cat /etc/resolv.conf
+    ```
+
+    **Check routes**:
+    ```bash
+    ip route show
+    ```
+
+    **Solution**: Ensure your tunnel configuration includes DNS servers:
+    ```ini
+    [Interface]
+    DNS = 1.1.1.1, 8.8.8.8
+    ```
+  </Accordion>
+
+  <Accordion title="Tunnel name too long error">
+    **Cause**: Tunnel filename exceeds 15 characters (gui/tunnels.go:217).
+
+    **Solution**: Rename the configuration file:
+    ```bash
+    sudo mv /etc/wireguard/very-long-tunnel-name.conf /etc/wireguard/shortvpn.conf
+    ```
+
+    Press F5 in WireGuird to refresh.
+  </Accordion>
+
+  <Accordion title="System tray icon not visible">
+    **Cause**: Desktop environment doesn't support system tray.
+
+    **GNOME Solution**:
+    ```bash
+    sudo apt install gnome-shell-extension-appindicator
+    gnome-extensions enable ubuntu-appindicators@ubuntu.com
+    ```
+
+    **KDE/XFCE**: System tray support is built-in. Check panel settings.
+  </Accordion>
+
+  <Accordion title="wg-quick command output errors">
+    WireGuird displays wg-quick errors in the logs panel (gui/tunnels.go:234-240, 288-294).
+
+    **Common errors**:
+
+    - **"Name or service not known"**: DNS can't resolve Endpoint
+      - Check internet connection
+      - Verify Endpoint address
+
+    - **"Operation not permitted"**: Permission issue
+      - Ensure running with sudo
+
+    - **"Cannot allocate memory"**: System resource limit
+      - Check available memory: `free -h`
+
+    - **"File exists"**: Interface already exists
+      - Disconnect first: `sudo wg-quick down <name>`
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+Now that you're familiar with the basics, explore more advanced features:
+
+<CardGroup cols={2}>
+  <Card title="Tunnel Editor" icon="code">
+    Learn about the built-in configuration editor with syntax highlighting and real-time validation.
+  </Card>
+  
+  <Card title="Multiple Tunnels" icon="sitemap">
+    Configure and manage multiple simultaneous VPN connections for advanced routing.
+  </Card>
+  
+  <Card title="Backup & Restore" icon="floppy-disk">
+    Export tunnel configurations for backup or migration to another system.
+  </Card>
+  
+  <Card title="Keyboard Shortcuts" icon="keyboard">
+    Master keyboard shortcuts for faster tunnel management.
+  </Card>
+</CardGroup>
+
+## Getting Help
+
+If you encounter issues:
+
+- **GitHub Issues**: [Report bugs or request features](https://github.com/UnnoTed/wireguird/issues)
+- **WireGuard Docs**: [Official WireGuard documentation](https://www.wireguard.com/)
+- **System Logs**: Check `journalctl -xe` for system-level WireGuard errors
+
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+WireGuird is open source! View the source code, contribute, or fork the project on [GitHub](https://github.com/UnnoTed/wireguird).
 </Note>

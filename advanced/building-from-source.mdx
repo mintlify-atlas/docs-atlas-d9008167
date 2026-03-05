@@ -1,0 +1,269 @@
+---
+title: Building from Source
+description: Complete guide to compiling WireGuird from source code
+---
+
+This guide covers everything you need to build WireGuird from source on Linux systems.
+
+## Prerequisites
+
+### System Requirements
+
+- Go 1.14 or later
+- GTK+ 3 development libraries
+- Ayatana AppIndicator development libraries
+- Standard build tools (gcc, make, etc.)
+
+### Supported Distributions
+
+WireGuird has been tested on:
+
+- Ubuntu 18.04 LTS, 20.04 LTS, 21.04, 22.04 LTS, 22.10, 23.04
+- Linux Mint 21.1
+- Debian-based distributions
+
+<Note>
+Fedora support is planned but not yet implemented. The build scripts currently only support Debian/Ubuntu-based distributions.
+</Note>
+
+## Installing Build Dependencies
+
+<Steps>
+  <Step title="Clone the repository">
+    Clone the WireGuird repository from GitHub:
+
+    ```bash
+    git clone https://github.com/UnnoTed/wireguird
+    cd wireguird
+    ```
+  </Step>
+
+  <Step title="Make scripts executable">
+    Ensure the build scripts have execute permissions:
+
+    ```bash
+    chmod +x ./*.sh
+    ```
+  </Step>
+
+  <Step title="Install dependencies">
+    Run the dependency installation script:
+
+    ```bash
+    ./deps.sh
+    ```
+
+    This script will automatically detect your distribution and install the required packages.
+  </Step>
+</Steps>
+
+### What deps.sh Installs
+
+The `deps.sh` script installs the following packages on Ubuntu/Debian:
+
+```bash
+sudo apt install wireguard-tools libgtk-3-dev libayatana-appindicator3-dev golang-go resolvconf
+```
+
+**Package breakdown:**
+
+- `wireguard-tools` - Required for `wg` and `wg-quick` commands
+- `libgtk-3-dev` - GTK+ 3 development headers
+- `libayatana-appindicator3-dev` - System tray indicator development libraries
+- `golang-go` - Go compiler and toolchain
+- `resolvconf` - DNS resolution management (runtime dependency)
+
+## Building the Application
+
+<Steps>
+  <Step title="Generate resources">
+    WireGuird uses `fileb0x` to embed static resources (icons, glade files) into the binary. This is handled automatically by the build process via `go generate`.
+  </Step>
+
+  <Step title="Build the package">
+    Run the packaging script:
+
+    ```bash
+    ./package.sh
+    ```
+
+    This script will:
+    - Detect your distribution (Ubuntu/Debian only)
+    - Call the appropriate packaging script (`package_deb.sh`)
+    - Build the Go binary with optimizations
+    - Create a `.deb` package in the `build/` directory
+  </Step>
+</Steps>
+
+### Build Process Details
+
+The `package_deb.sh` script performs these steps:
+
+```bash
+# Clean previous builds
+rm -r ./build/wireguird_1.1.0_amd64.deb
+rm -r ./deb/opt/wireguird/
+
+# Create directory structure
+mkdir -p ./deb/opt/wireguird/
+
+# Generate embedded resources and build binary
+go generate
+go build -ldflags "-s -w" -trimpath -o ./deb/opt/wireguird/wireguird
+
+# Copy icons
+cp -r ./Icon/ ./deb/opt/wireguird/
+
+# Create settings file
+touch ./deb/opt/wireguird/wireguird.settings
+
+# Build .deb package
+mkdir ./build/
+dpkg-deb --root-owner-group --build ./deb ./build/wireguird_1.1.0_amd64.deb
+```
+
+**Build flags explained:**
+
+- `-ldflags "-s -w"` - Strip debugging information and symbol table (reduces binary size)
+- `-trimpath` - Remove file system paths from the binary (improves reproducibility)
+
+## Installing
+
+<Steps>
+  <Step title="Install the package">
+    Run the installation script:
+
+    ```bash
+    ./install.sh
+    ```
+
+    Or install the `.deb` package manually:
+
+    ```bash
+    sudo dpkg -i ./build/wireguird_amd64.deb
+    ```
+  </Step>
+</Steps>
+
+### Installation Locations
+
+After installation, files are located at:
+
+- **Binary**: `/opt/wireguird/wireguird`
+- **Icons**: `/opt/wireguird/Icon/`
+- **Settings**: `/opt/wireguird/wireguird.settings`
+- **Desktop entry**: `/usr/share/applications/wireguird.desktop`
+
+## Manual Build (Without .deb)
+
+If you prefer to build without creating a package:
+
+```bash
+# Install dependencies
+./deps.sh
+
+# Generate embedded resources
+go generate
+
+# Build the binary
+go build -ldflags "-s -w" -trimpath -o wireguird
+
+# Run from current directory
+./wireguird
+```
+
+<Warning>
+When running without installing, you'll need to ensure the Icon directory is in the same location as the binary, or update the icon path in the code.
+</Warning>
+
+## Build Artifacts
+
+After a successful build, you'll have:
+
+- `build/wireguird_1.1.0_amd64.deb` - Installable Debian package (~2.6 MB)
+- `deb/opt/wireguird/wireguird` - Compiled binary
+
+## Customizing the Build
+
+### Changing the Version
+
+Edit `package_deb.sh` and update the VERSION variable:
+
+```bash
+VERSION="1.1.0"  # Change this
+```
+
+Also update the version in `deb/DEBIAN/control`:
+
+```
+Version: 1.1.0
+```
+
+### Modifying Build Flags
+
+You can add additional build flags in `package_deb.sh`:
+
+```bash
+go build -ldflags "-s -w -X main.version=1.1.0" -trimpath -o wireguird
+```
+
+## Troubleshooting Build Issues
+
+<AccordionGroup>
+  <Accordion title="go: command not found">
+    The Go toolchain is not installed or not in your PATH.
+
+    **Solution:**
+    ```bash
+    sudo apt install golang-go
+    ```
+
+    Or download the latest version from [golang.org](https://golang.org/dl/).
+  </Accordion>
+
+  <Accordion title="Package gtk-3.0 was not found">
+    GTK+ 3 development libraries are missing.
+
+    **Solution:**
+    ```bash
+    sudo apt install libgtk-3-dev
+    ```
+  </Accordion>
+
+  <Accordion title="cannot find package github.com/UnnoTed/fileb0x">
+    Go modules need to be downloaded.
+
+    **Solution:**
+    ```bash
+    go mod download
+    go mod tidy
+    ```
+  </Accordion>
+
+  <Accordion title="dpkg-deb: error: failed to open package info file">
+    The `deb/DEBIAN/control` file is missing or malformed.
+
+    **Solution:**
+    Ensure the control file exists with correct format. Check that you haven't modified the package structure.
+  </Accordion>
+</AccordionGroup>
+
+## Development Build
+
+For development purposes, you can build without optimizations:
+
+```bash
+go generate
+go build -o wireguird
+./wireguird
+```
+
+This creates a binary with debugging symbols and faster compilation time.
+
+## Next Steps
+
+After building:
+
+- See [Dependencies](/advanced/dependencies) for runtime requirements
+- Check [Troubleshooting](/advanced/troubleshooting) for common issues
+- Review the [Settings](/user-guide/settings) guide for configuration

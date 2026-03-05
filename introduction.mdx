@@ -1,0 +1,153 @@
+---
+title: Introduction
+description: A GTK GUI client for managing WireGuard VPN tunnels on Linux
+---
+
+## What is WireGuird?
+
+WireGuird is a Linux GTK GUI client for [WireGuard](https://www.wireguard.com/) that provides a graphical interface for managing VPN tunnels. Written in Go using GTK+3, it brings a familiar desktop experience to WireGuard management on Linux systems, closely matching the look and feel of the official Windows WireGuard client.
+
+<Info>
+WireGuird version 1.1.0 is tested on Ubuntu 23.04, 22.10, 22.04 LTS, 20.04 LTS, 18.04 LTS, and Linux Mint 21.1.
+</Info>
+
+## Key Features
+
+<CardGroup cols={2}>
+  <Card title="System Tray Integration" icon="bell">
+    Visual connection status with color-coded icons: red when connected to a tunnel, black when disconnected.
+  </Card>
+  
+  <Card title="Native WireGuard Control" icon="network-wired">
+    Controls WireGuard directly through `wg-quick` commands for reliable tunnel management.
+  </Card>
+  
+  <Card title="Tunnel Management" icon="folder">
+    Lists and manages all tunnels from `/etc/wireguard/` with support for importing `.conf` and `.zip` files.
+  </Card>
+  
+  <Card title="Multiple Tunnels" icon="sitemap">
+    Optional support for running multiple active tunnels simultaneously.
+  </Card>
+  
+  <Card title="Real-time Statistics" icon="chart-line">
+    Live display of transfer statistics, handshake times, and connection details.
+  </Card>
+  
+  <Card title="Built-in Editor" icon="code">
+    Edit tunnel configurations directly within the application with syntax highlighting.
+  </Card>
+</CardGroup>
+
+## How It Works
+
+### Architecture
+
+WireGuird acts as a graphical frontend to the standard WireGuard tools on Linux:
+
+1. **Tunnel Discovery**: Scans `/etc/wireguard/` for `.conf` files (gui/gui.go:20)
+2. **Connection Control**: Executes `wg-quick up` and `wg-quick down` commands (gui/tunnels.go:232, 286)
+3. **Status Monitoring**: Uses the WireGuard control library (`wgctrl`) to fetch real-time tunnel statistics (gui/gui.go:49)
+4. **Configuration Management**: Parses and validates `.conf` files using the INI format (gui/tunnels.go:926)
+
+### System Tray Behavior
+
+The application features intelligent system tray integration:
+
+- **Disconnected State**: Black "wireguard_off" icon
+- **Connected State**: Red "wg_connected" icon
+- **Start on Tray**: Optional setting to launch minimized to system tray
+- **Quick Access**: Show/Hide window and Quit options from tray menu
+
+<Note>
+The system tray uses Ayatana AppIndicator for broad compatibility across different Linux desktop environments.
+</Note>
+
+### Tunnel Configuration Format
+
+WireGuird works with standard WireGuard configuration files. Each tunnel is a `.conf` file in `/etc/wireguard/` with the following structure:
+
+```ini
+[Interface]
+PrivateKey = <your-private-key>
+Address = 10.0.0.2/24
+DNS = 1.1.1.1
+
+[Peer]
+PublicKey = <peer-public-key>
+Endpoint = vpn.example.com:51820
+AllowedIPs = 0.0.0.0/0
+PersistentKeepalive = 25
+```
+
+## Real-time Monitoring
+
+When a tunnel is active, WireGuird displays comprehensive connection details:
+
+### Interface Information
+- **Status**: Active/Inactive state
+- **Public Key**: Interface's public key (derived from private key)
+- **Listen Port**: UDP port for incoming connections
+- **Addresses**: IP addresses assigned to the interface
+- **DNS Servers**: DNS servers configured for the tunnel
+
+### Peer Information
+- **Public Key**: Remote peer's public key
+- **Allowed IPs**: IP ranges routed through the tunnel
+- **Endpoint**: Remote server address and port
+- **Latest Handshake**: Time since last successful handshake
+- **Transfer Statistics**: Received and sent bytes in human-readable format
+
+<Info>
+Statistics update every second when the window has focus, providing real-time visibility into your VPN connection (gui/tunnels.go:833).
+</Info>
+
+## Settings & Customization
+
+WireGuird includes several configurable options:
+
+### Multiple Active Tunnels
+Enable running multiple WireGuard tunnels simultaneously. When disabled, activating a new tunnel automatically disconnects any active tunnels (gui/tunnels.go:249).
+
+### Start on Tray
+Launch the application minimized to the system tray instead of showing the main window (main.go:147).
+
+### Check for Updates
+Automatically check for new releases from the GitHub repository. Checks run 60 seconds after launch and then every 24 hours (gui/gui.go:81-99).
+
+<Warning>
+Settings are stored in `./wireguird.settings` as JSON. The application requires read/write permissions for this file (settings/settings.go:12).
+</Warning>
+
+## Use Cases
+
+WireGuird is ideal for:
+
+- **Desktop Users**: Those who prefer GUI applications over command-line tools
+- **Multiple VPN Management**: Users who need to switch between different WireGuard configurations frequently
+- **Visual Feedback**: Anyone who wants clear visual indicators of VPN connection status
+- **Quick Access**: Users who want system tray integration for fast VPN control
+
+## Technical Stack
+
+- **Language**: Go (Golang)
+- **UI Framework**: GTK+3 via gotk3 bindings
+- **System Tray**: Ayatana AppIndicator
+- **WireGuard Control**: golang.zx2c4.com/wireguard/wgctrl
+- **Configuration Parsing**: gopkg.in/ini.v1
+
+<Note>
+WireGuird requires root/sudo privileges to manage WireGuard tunnels since it executes `wg-quick` commands that modify network interfaces.
+</Note>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/installation">
+    Install WireGuird on your Linux system
+  </Card>
+  
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Get up and running in 5 minutes
+  </Card>
+</CardGroup>

@@ -1,0 +1,468 @@
+---
+title: Application Settings
+description: Configure WireGuird behavior including multiple tunnel connections, system tray startup, and automatic update checks
+---
+
+## Overview
+
+WireGuird provides configurable settings to customize application behavior. Settings are stored in a JSON file (`wireguird.settings`) and persist across application restarts.
+
+## Accessing Settings
+
+<Steps>
+  <Step title="Open the menu">
+    Click the **Menu** button (three-line hamburger icon) in the main window header.
+  </Step>
+  
+  <Step title="Select Settings">
+    Click **Settings** from the dropdown menu.
+  </Step>
+  
+  <Step title="Settings window appears">
+    The settings window displays with checkboxes for each configurable option.
+  </Step>
+</Steps>
+
+## Available Settings
+
+WireGuird offers three main configuration options:
+
+### Multiple Active Tunnels
+
+**Setting ID**: `settings_multiple_active_tunnels`
+
+**Type**: Checkbox
+
+**Default**: Disabled (off)
+
+Controls whether multiple WireGuard tunnels can be active simultaneously.
+
+<Tabs>
+  <Tab title="Disabled (Default)">
+    When **Multiple Tunnels** is disabled:
+    
+    - Only one tunnel can be active at a time
+    - Activating a new tunnel automatically deactivates all other active tunnels
+    - Simpler routing configuration
+    - Recommended for most users
+    
+    **Example behavior**:
+    ```
+    1. Connect to "office-vpn" → Connected
+    2. Connect to "home-vpn" → office-vpn disconnects, home-vpn connects
+    3. Only home-vpn is now active
+    ```
+  </Tab>
+  
+  <Tab title="Enabled">
+    When **Multiple Tunnels** is enabled:
+    
+    - Multiple tunnels can be active simultaneously
+    - Each tunnel maintains its own network interface
+    - Clicking "Deactivate" only disconnects the selected tunnel
+    - Header shows all active tunnels: "Connected to tunnel1, tunnel2, tunnel3"
+    
+    **Example behavior**:
+    ```
+    1. Connect to "office-vpn" → Connected
+    2. Connect to "home-vpn" → Both now active
+    3. Both office-vpn and home-vpn are active simultaneously
+    ```
+  </Tab>
+</Tabs>
+
+**Technical Details**:
+
+```go
+// Source: gui/tunnels.go:249-268
+if Settings.MultipleTunnels {
+    // Only disconnect the specific tunnel being toggled
+    d, err := wgc.Device(name)
+    if err != nil && !errors.Is(err, os.ErrNotExist) {
+        return err
+    }
+    
+    if !errors.Is(err, os.ErrNotExist) {
+        if err := dc(d); err != nil {
+            return err
+        }
+    }
+} else {
+    // Disconnect ALL tunnels before connecting to a new one
+    for _, d := range list {
+        if err := dc(d); err != nil {
+            return err
+        }
+    }
+}
+```
+
+<Warning>
+Enabling multiple tunnels can create complex routing scenarios. Ensure your `AllowedIPs` configurations don't overlap, or you may experience unexpected routing behavior and connection issues.
+</Warning>
+
+### Start on Tray
+
+**Setting ID**: `settings_start_tray`
+
+**Type**: Checkbox
+
+**Default**: Disabled (off)
+
+Controls whether WireGuird starts minimized to the system tray or shows the main window on launch.
+
+<Tabs>
+  <Tab title="Disabled (Default)">
+    When **Start on Tray** is disabled:
+    
+    - The main WireGuird window appears when you launch the application
+    - Normal desktop application behavior
+    - Easier to discover and interact with on startup
+    - Recommended for manual VPN management
+  </Tab>
+  
+  <Tab title="Enabled">
+    When **Start on Tray** is enabled:
+    
+    - WireGuird starts hidden, with only a system tray icon visible
+    - The main window doesn't appear automatically
+    - Right-click the tray icon and select **Show** to open the window
+    - Useful for background VPN connections or autostart setups
+  </Tab>
+</Tabs>
+
+**Technical Details**:
+
+```go
+// Source: main.go:147-149
+if !gui.Settings.StartOnTray {
+    win.ShowAll()
+}
+```
+
+The application always creates the system tray icon. This setting only controls whether the main window is initially visible.
+
+**System Tray Icon**:
+
+- **Icon**: `wireguard_off` when no tunnels are active
+- **Icon**: `wg_connected` when at least one tunnel is active
+- **Right-click menu**:
+  - **Show**: Display the main WireGuird window
+  - **Quit**: Exit the application and disconnect all tunnels
+
+<Info>
+You can close the main window at any time (without quitting), and WireGuird continues running in the system tray. Active VPN connections remain connected.
+</Info>
+
+### Check for Updates
+
+**Setting ID**: `settings_check_updates`
+
+**Type**: Checkbox
+
+**Default**: Enabled (on)
+
+Controls whether WireGuird automatically checks for new versions on GitHub.
+
+<Tabs>
+  <Tab title="Enabled (Default)">
+    When **Check Updates** is enabled:
+    
+    - First check occurs 60 seconds after application startup
+    - Subsequent checks occur every 24 hours
+    - If a new version is available, a dialog appears:
+      
+      "Wireguird: update available => [version-tag]"
+    
+    - Checks are performed in the background without disrupting usage
+    - No automatic downloads or installations
+  </Tab>
+  
+  <Tab title="Disabled">
+    When **Check Updates** is disabled:
+    
+    - No automatic update checks are performed
+    - You can still check for updates manually by visiting the GitHub repo
+    - Network traffic is reduced (one less periodic request)
+    - Useful for air-gapped systems or restrictive networks
+  </Tab>
+</Tabs>
+
+**Technical Details**:
+
+```go
+// Source: gui/gui.go:81-100
+if Settings.CheckUpdates {
+    go func() {
+        time.Sleep(60 * time.Second)
+        if err := updateCheck(); err != nil {
+            log.Error().Err(err).Msg("error on update check")
+        }
+        
+        updateTicker = time.NewTicker(24 * time.Hour)
+        defer updateTicker.Stop()
+        
+        for {
+            select {
+            case <-updateTicker.C:
+                if err := updateCheck(); err != nil {
+                    log.Error().Err(err).Msg("error on update check")
+                }
+            }
+        }
+    }()
+}
+```
+
+**Update Check Process**:
+
+1. Queries GitHub API: `https://api.github.com/repos/UnnoTed/wireguird/releases`
+2. Compares latest release tag with current version (`1.1.0`)
+3. If different, shows notification dialog
+4. User must manually visit GitHub to download updates
+
+<Note>
+WireGuird does not automatically download or install updates. The update check only notifies you that a new version is available. You must manually download and install updates from the GitHub releases page.
+</Note>
+
+## Saving Settings
+
+After modifying any settings:
+
+<Steps>
+  <Step title="Click Save">
+    Click the **Save** button (button_settings_save) in the settings window.
+  </Step>
+  
+  <Step title="Settings are persisted">
+    Your changes are written to `wireguird.settings` and take effect immediately.
+    
+    The settings window closes automatically.
+  </Step>
+</Steps>
+
+**Settings File**:
+
+```json
+{
+  "MultipleTunnels": false,
+  "StartOnTray": false,
+  "CheckUpdates": true,
+  "Debug": false
+}
+```
+
+**File Location**: `./wireguird.settings` (in the current working directory when WireGuird is launched)
+
+## Canceling Changes
+
+If you want to discard your modifications:
+
+<Steps>
+  <Step title="Click Cancel">
+    Click the **Cancel** button (button_settings_cancel) in the settings window.
+  </Step>
+  
+  <Step title="Settings are reverted">
+    All checkbox states are reset to their saved values (before you opened the settings window).
+    
+    The settings window closes without saving changes.
+  </Step>
+</Steps>
+
+```go
+// Source: gui/tunnels.go:816-827
+btnSettingsCancel.Connect("clicked", func() {
+    err := func() error {
+        Settings.Init()  // Reload settings from file
+        settingsWindow.Close()
+        return nil
+    }()
+    
+    if err != nil {
+        ShowError(window, err, "settings cancel error")
+    }
+})
+```
+
+## Settings Implementation
+
+WireGuird uses a simple settings system:
+
+### Settings Structure
+
+```go
+// Source: settings/settings.go:14-19
+type Settings struct {
+    MultipleTunnels bool
+    StartOnTray     bool
+    CheckUpdates    bool
+    Debug           bool
+}
+```
+
+### Loading Settings
+
+Settings are loaded automatically when WireGuird starts:
+
+```go
+// Source: settings/settings.go:59-80
+func (s *Settings) Load() error {
+    if !dry.FileExists(FilePath) {
+        return nil  // Use defaults if file doesn't exist
+    }
+    
+    data, err := ioutil.ReadFile(FilePath)
+    if err != nil {
+        return err
+    }
+    
+    settings := &Settings{}
+    if err := json.Unmarshal(data, &settings); err != nil {
+        return err
+    }
+    
+    *s = *settings
+    return nil
+}
+```
+
+<Info>
+If `wireguird.settings` doesn't exist, WireGuird uses default values (MultipleTunnels: false, StartOnTray: false, CheckUpdates: true).
+</Info>
+
+### Saving Settings
+
+```go
+// Source: settings/settings.go:44-57
+func (s *Settings) Save() error {
+    data, err := json.Marshal(s)
+    if err != nil {
+        return err
+    }
+    
+    if err := ioutil.WriteFile(FilePath, data, 0660); err != nil {
+        return err
+    }
+    
+    return nil
+}
+```
+
+Settings are saved with file permissions `0660` (read/write for owner and group, no access for others).
+
+## Debug Mode
+
+There's an additional hidden setting in the settings structure:
+
+**Debug**: Enables debug-level logging
+
+This setting is not exposed in the GUI but can be manually added to `wireguird.settings`:
+
+```json
+{
+  "MultipleTunnels": false,
+  "StartOnTray": false,
+  "CheckUpdates": true,
+  "Debug": true
+}
+```
+
+When enabled, WireGuird logs detailed debug information to the console, including:
+- Settings initialization
+- Device list queries
+- UI event handling
+- Configuration file parsing
+
+<Note>
+Debug mode affects console output only. The WireGuard logs panel in the GUI shows INFO and ERROR messages regardless of the debug setting.
+</Note>
+
+## Checking Current Version
+
+To see which version of WireGuird you're running:
+
+1. Click the **Menu** button in the main window
+2. The menu shows: "VERSION: v[version]" (e.g., "VERSION: v1.1.0")
+3. Clicking this menu item opens the GitHub repository in your browser
+
+```go
+// Source: gui/gui.go:17-19
+const (
+    Version     = "1.1.0"
+    Repo        = "https://github.com/UnnoTed/wireguird"
+)
+```
+
+## Advanced Configuration
+
+Advanced users can manually edit `wireguird.settings` while the application is closed:
+
+```bash
+# View current settings
+cat wireguird.settings
+
+# Edit with your preferred editor
+nano wireguird.settings
+
+# Example content:
+{
+  "MultipleTunnels": true,
+  "StartOnTray": true,
+  "CheckUpdates": false,
+  "Debug": true
+}
+```
+
+Settings take effect the next time you launch WireGuird.
+
+<Warning>
+Manually editing the settings file can cause WireGuird to fail to start if the JSON is malformed. Always validate JSON syntax before saving.
+</Warning>
+
+## Troubleshooting Settings
+
+### Settings Don't Persist
+
+If your settings reset after closing WireGuird:
+
+- Check that `wireguird.settings` exists in the working directory
+- Verify file permissions: `ls -l wireguird.settings`
+- Ensure you clicked **Save**, not **Cancel**
+- Check the console for error messages about file writing
+
+### Settings File Location
+
+The settings file is created in the **current working directory** where WireGuird was launched:
+
+```bash
+# Check where WireGuird is running from
+pwd
+
+# Look for the settings file
+ls -la wireguird.settings
+```
+
+If you launch WireGuird from different directories, it may create separate settings files.
+
+### Reset to Defaults
+
+To reset all settings to defaults:
+
+```bash
+# Delete the settings file
+rm wireguird.settings
+
+# Restart WireGuird - it will use default settings
+```
+
+Alternatively, manually edit the file with default values:
+
+```json
+{
+  "MultipleTunnels": false,
+  "StartOnTray": false,
+  "CheckUpdates": true,
+  "Debug": false
+}
+```

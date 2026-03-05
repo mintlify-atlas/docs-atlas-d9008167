@@ -1,0 +1,422 @@
+---
+title: Dependencies
+description: Complete guide to WireGuird's runtime and build dependencies
+---
+
+WireGuird requires several system libraries and tools to build and run. This page provides detailed information about each dependency.
+
+## Runtime Dependencies
+
+These packages must be installed for WireGuird to run properly.
+
+### WireGuard Tools
+
+**Package:** `wireguard-tools`
+
+**Purpose:** Provides the `wg` and `wg-quick` command-line utilities that WireGuird uses to manage WireGuard tunnels.
+
+**Installation:**
+```bash
+sudo apt install wireguard-tools
+```
+
+**What it includes:**
+- `wg` - Configuration utility for WireGuard
+- `wg-quick` - Script for quickly bringing up/down WireGuard interfaces
+
+**Version requirements:** Any recent version (1.0.20200513 or later recommended)
+
+<Note>
+WireGuird does not directly interface with the kernel module. It uses `wg-quick` as a subprocess to manage tunnels, which is why this package is essential.
+</Note>
+
+### resolvconf
+
+**Package:** `resolvconf`
+
+**Purpose:** Manages DNS resolver configuration. Required by `wg-quick` to set DNS servers specified in tunnel configurations.
+
+**Installation:**
+```bash
+sudo apt install resolvconf
+```
+
+**What it does:**
+- Updates `/etc/resolv.conf` when tunnels connect/disconnect
+- Manages DNS nameserver priorities
+- Restores original DNS settings when tunnel is disabled
+
+**Why it's required:**
+When a WireGuard tunnel specifies DNS servers in the `[Interface]` section:
+```ini
+[Interface]
+DNS = 1.1.1.1, 1.0.0.1
+```
+
+`wg-quick` calls `resolvconf` to apply these settings. Without it, you'll see:
+```
+resolvconf: command not found
+```
+
+**Alternatives:**
+- `systemd-resolved` (on systemd-based systems)
+- `openresolv`
+
+### GTK+ 3 Runtime
+
+**Package:** `libgtk-3-0`
+
+**Purpose:** The GTK+ 3 toolkit provides the graphical interface components.
+
+**Installation:**
+```bash
+sudo apt install libgtk-3-0
+```
+
+**What it provides:**
+- Window management
+- UI widgets (buttons, text fields, etc.)
+- Dialog boxes
+- CSS styling support
+
+**Version:** GTK 3.18 or later (automatically installed on modern Ubuntu/Debian systems)
+
+### Ayatana AppIndicator
+
+**Package:** `libayatana-appindicator3-1`
+
+**Purpose:** Provides the system tray icon functionality.
+
+**Installation:**
+```bash
+sudo apt install libayatana-appindicator3-1
+```
+
+**What it provides:**
+- System tray indicator support
+- Menu for the tray icon (Show/Quit options)
+- Desktop environment integration
+
+**Desktop environment support:**
+- ✅ Ubuntu/Unity
+- ✅ GNOME (with AppIndicator extension)
+- ✅ XFCE
+- ✅ MATE
+- ✅ Cinnamon
+- ⚠️ KDE Plasma (limited support)
+
+<Warning>
+On GNOME-based desktops, you may need to install the AppIndicator extension:
+```bash
+sudo apt install gnome-shell-extension-appindicator
+```
+</Warning>
+
+## Build Dependencies
+
+These packages are only needed when compiling WireGuird from source.
+
+### Go Programming Language
+
+**Package:** `golang-go`
+
+**Purpose:** Go compiler and toolchain for building the application.
+
+**Installation:**
+```bash
+sudo apt install golang-go
+```
+
+**Version requirements:** Go 1.14 or later (specified in `go.mod`)
+
+**What's included:**
+- Go compiler (`go build`)
+- Go modules support (`go mod`)
+- Code generation tools (`go generate`)
+
+**Alternative installation:**
+For the latest version, download from [golang.org](https://golang.org/dl/):
+```bash
+wget https://go.dev/dl/go1.21.0.linux-amd64.tar.gz
+sudo tar -C /usr/local -xzf go1.21.0.linux-amd64.tar.gz
+export PATH=$PATH:/usr/local/go/bin
+```
+
+### GTK+ 3 Development Files
+
+**Package:** `libgtk-3-dev`
+
+**Purpose:** Header files and pkg-config metadata for building against GTK+ 3.
+
+**Installation:**
+```bash
+sudo apt install libgtk-3-dev
+```
+
+**What it provides:**
+- C header files for GTK+ 3
+- pkg-config `.pc` files
+- Development documentation
+
+**Required for:** The `gotk3` Go package uses cgo to interface with GTK+ C libraries.
+
+### Ayatana AppIndicator Development Files
+
+**Package:** `libayatana-appindicator3-dev`
+
+**Purpose:** Development headers for building applications with AppIndicator support.
+
+**Installation:**
+```bash
+sudo apt install libayatana-appindicator3-dev
+```
+
+**What it provides:**
+- C header files for AppIndicator library
+- pkg-config metadata
+- Required for compiling the tray icon functionality
+
+## Go Module Dependencies
+
+WireGuird uses several Go packages, defined in `go.mod`:
+
+### GUI and Graphics
+
+```go
+github.com/gotk3/gotk3 v0.6.1
+```
+**Purpose:** Go bindings for GTK+ 3, GLib, and Cairo
+
+**Provides:**
+- GTK widget wrappers
+- Signal/event handling
+- UI construction from Glade files
+
+---
+
+```go
+github.com/UnnoTed/go-appindicator v0.0.0-20230327231603-45f589795ad5
+```
+**Purpose:** Go bindings for libayatana-appindicator3
+
+**Provides:**
+- System tray indicator creation
+- Tray menu management
+- Icon status updates (red when connected, black when disconnected)
+
+---
+
+```go
+github.com/UnnoTed/horizontal v0.0.0-20220811200655-cbe810c8df9b
+```
+**Purpose:** Custom console output formatting for zerolog
+
+**Provides:**
+- Colored console output
+- Improved log readability
+
+### WireGuard Management
+
+```go
+golang.zx2c4.com/wireguard/wgctrl v0.0.0-20230215201556-9c5414ab4bde
+```
+**Purpose:** WireGuard control library for Go
+
+**Provides:**
+- Read WireGuard device information
+- Parse configuration
+- Query peer statistics (handshake time, data transfer)
+
+**Key types used:**
+- `wgtypes.Device` - Represents a WireGuard interface
+- `wgtypes.Peer` - Represents a WireGuard peer
+
+### Logging
+
+```go
+github.com/rs/zerolog v1.29.0
+```
+**Purpose:** Fast, structured logging library
+
+**Usage in WireGuird:**
+```go
+log.Error().Err(err).Msg("error message")
+log.Info().Str("key", "value").Msg("info message")
+```
+
+**Configured in:** `main.go:21`
+
+### Configuration Parsing
+
+```go
+gopkg.in/ini.v1 v1.67.0
+```
+**Purpose:** INI file parser
+
+**Used for:**
+- Parsing WireGuard `.conf` files
+- Reading `[Interface]` and `[Peer]` sections
+
+### Utilities
+
+```go
+github.com/dustin/go-humanize v1.0.1
+```
+**Purpose:** Human-readable formatting of numbers and sizes
+
+**Used for:**
+- Formatting data transfer amounts (MB, GB)
+- Time duration formatting
+
+---
+
+```go
+github.com/ungerik/go-dry v0.0.0-20220205124545-c028a5f03370
+```
+**Purpose:** Don't Repeat Yourself utility functions
+
+**Provides:**
+- File I/O helpers
+- String manipulation utilities
+
+---
+
+```go
+github.com/UnnoTed/fileb0x v1.1.4
+```
+**Purpose:** Embed static files into Go binaries
+
+**Used for:**
+- Embedding `wireguird.glade` (UI definition)
+- Embedding icon files
+- Creating the `static/ab0x.go` file
+
+**Configuration:** `fileb0x.toml`
+
+## Dependency Installation Scripts
+
+### Quick Install (Recommended)
+
+For Ubuntu/Debian systems:
+
+```bash
+# Clone and enter repository
+git clone https://github.com/UnnoTed/wireguird
+cd wireguird
+
+# Install all dependencies
+chmod +x ./deps.sh
+./deps.sh
+```
+
+### Manual Installation
+
+If you prefer to install dependencies manually:
+
+**Runtime + Build:**
+```bash
+sudo apt update
+sudo apt install \
+  wireguard-tools \
+  resolvconf \
+  libgtk-3-0 \
+  libgtk-3-dev \
+  libayatana-appindicator3-1 \
+  libayatana-appindicator3-dev \
+  golang-go
+```
+
+**Runtime only (for binary installation):**
+```bash
+sudo apt install \
+  wireguard-tools \
+  resolvconf \
+  libgtk-3-0 \
+  libayatana-appindicator3-1
+```
+
+## Verifying Dependencies
+
+### Check Installed Packages
+
+```bash
+# Check if packages are installed
+dpkg -l | grep -E 'wireguard|gtk|appindicator|golang'
+```
+
+### Check Go Version
+
+```bash
+go version
+# Should output: go version go1.14 or later
+```
+
+### Check WireGuard Tools
+
+```bash
+wg --version
+wg-quick --version
+```
+
+### Check GTK Version
+
+```bash
+pkg-config --modversion gtk+-3.0
+# Should output: 3.18.0 or later
+```
+
+### Verify Go Modules
+
+After cloning the repository:
+
+```bash
+cd wireguird
+go mod download
+go mod verify
+```
+
+## Distribution-Specific Notes
+
+### Ubuntu 18.04 LTS
+
+- Uses AppIndicator (not Ayatana variant)
+- Install `libappindicator3-dev` instead
+- Go version may need manual update
+
+### Ubuntu 22.04+ / Debian 11+
+
+- Uses Ayatana AppIndicator by default
+- All packages available in main repositories
+- Recommended for easiest setup
+
+### Fedora (Planned Support)
+
+The equivalent packages on Fedora would be:
+```bash
+# Not yet implemented in deps.sh
+sudo dnf install \
+  wireguard-tools \
+  gtk3-devel \
+  golang \
+  openresolv
+```
+
+<Note>
+Fedora support is mentioned in the source but not yet fully implemented. Contributions welcome!
+</Note>
+
+## Troubleshooting Dependency Issues
+
+See the [Troubleshooting](/advanced/troubleshooting) page for solutions to common dependency-related problems.
+
+**Common issues:**
+- Missing GTK libraries
+- AppIndicator not showing
+- resolvconf command not found
+- Go build errors related to cgo
+
+## Next Steps
+
+- [Build from source](/advanced/building-from-source) with these dependencies
+- [Troubleshoot issues](/advanced/troubleshooting) if dependencies fail
+- [Configure WireGuird settings](/user-guide/settings) after installation

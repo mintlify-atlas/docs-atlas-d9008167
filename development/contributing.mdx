@@ -1,0 +1,700 @@
+---
+title: 'Contributing'
+description: 'Learn how to contribute to WireGuird: development setup, code style, testing, and submitting pull requests'
+---
+
+## Welcome Contributors!
+
+WireGuird is an open-source project, and we welcome contributions from the community. Whether you're fixing bugs, adding features, improving documentation, or reporting issues, your help is appreciated.
+
+## Getting Started
+
+### Prerequisites
+
+Before you begin developing WireGuird, ensure you have the following installed:
+
+<CardGroup cols={2}>
+  <Card title="System Dependencies" icon="linux">
+    - **GTK 3** development libraries
+    - **libayatana-appindicator3** for system tray
+    - **WireGuard tools** (wg-quick, wg)
+    - **resolvconf** for DNS management
+  </Card>
+  <Card title="Development Tools" icon="code">
+    - **Go 1.14+** (project uses Go modules)
+    - **Git** for version control
+    - **Glade** (optional, for UI editing)
+  </Card>
+</CardGroup>
+
+### Installing Dependencies
+
+#### Ubuntu/Debian
+
+```bash
+sudo apt-get update
+sudo apt-get install \
+    wireguard-tools \
+    libgtk-3-dev \
+    libayatana-appindicator3-dev \
+    golang-go \
+    resolvconf \
+    git
+```
+
+#### Arch Linux
+
+```bash
+sudo pacman -S \
+    wireguard-tools \
+    gtk3 \
+    libappindicator-gtk3 \
+    go \
+    git
+```
+
+#### Fedora
+
+```bash
+sudo dnf install \
+    wireguard-tools \
+    gtk3-devel \
+    libappindicator-gtk3-devel \
+    golang \
+    git
+```
+
+## Development Setup
+
+<Steps>
+  <Step title="Clone the Repository">
+    ```bash
+    git clone https://github.com/UnnoTed/wireguird
+    cd wireguird
+    ```
+  </Step>
+  
+  <Step title="Install Go Dependencies">
+    ```bash
+    go mod download
+    ```
+    
+    This will download all required Go packages, including:
+    - `gotk3` - GTK 3 bindings for Go
+    - `wgctrl` - WireGuard control library
+    - `zerolog` - Structured logging
+    - `go-appindicator` - System tray support
+  </Step>
+  
+  <Step title="Generate Code">
+    Run the code generators to create GTK helper functions and embed resources:
+    
+    ```bash
+    go generate ./...
+    ```
+    
+    This executes the `go:generate` directives in `main.go`:
+    - Generates `gui/get/gtk.go` (GTK widget accessors)
+    - Embeds `wireguird.glade` and other resources via fileb0x
+  </Step>
+  
+  <Step title="Build the Application">
+    ```bash
+    go build -o wireguird .
+    ```
+    
+    Or use the provided build script:
+    
+    ```bash
+    chmod +x package.sh
+    ./package.sh
+    ```
+  </Step>
+  
+  <Step title="Run WireGuird">
+    The application requires sudo privileges to manage WireGuard tunnels:
+    
+    ```bash
+    sudo ./wireguird
+    ```
+    
+    Or use the run script:
+    
+    ```bash
+    chmod +x run.sh
+    ./run.sh
+    ```
+  </Step>
+</Steps>
+
+<Note>
+**Why sudo?** WireGuird uses `wg-quick` to manage tunnels, which requires root privileges to configure network interfaces, routing tables, and DNS settings.
+</Note>
+
+## Project Structure
+
+Understanding the codebase organization will help you contribute more effectively:
+
+```
+wireguird/
+├── main.go                    # Entry point, window creation
+├── gui/
+│   ├── gui.go                 # Core GUI initialization
+│   ├── tunnels.go             # Tunnel management, event handlers
+│   └── get/
+│       ├── gtk.go             # Generated GTK widget helpers
+│       └── generator/
+│           └── generator.go   # Code generator for gtk.go
+├── settings/
+│   └── settings.go            # User settings persistence
+├── static/
+│   └── ab0x.go               # Generated embedded resources
+├── wireguird.glade            # GTK UI layout (Glade XML)
+├── Icon/                      # Application icons
+├── fileb0x.toml              # Resource embedding config
+├── deps.sh                    # Dependency installation script
+├── package.sh                 # Build script
+├── package_deb.sh            # Debian package builder
+├── install.sh                # Local installation script
+└── go.mod                     # Go module dependencies
+```
+
+## Code Style and Guidelines
+
+### Go Code Style
+
+WireGuird follows standard Go conventions:
+
+<Accordion title="Formatting">
+  Always run `gofmt` before committing:
+  
+  ```bash
+  gofmt -w .
+  ```
+  
+  Or use `go fmt`:
+  
+  ```bash
+  go fmt ./...
+  ```
+</Accordion>
+
+<Accordion title="Naming Conventions">
+  - **Exported functions/types**: Use `PascalCase`
+  - **Unexported functions/types**: Use `camelCase`
+  - **Constants**: Use `PascalCase` (e.g., `TunnelsPath`, `IconPath`)
+  - **Package names**: Use lowercase, single word (e.g., `gui`, `settings`)
+  
+  Example from the codebase:
+  
+  ```go gui/gui.go:17-22
+  const (
+      Version     = "1.1.0"           // Exported constant
+      Repo        = "https://github.com/UnnoTed/wireguird"
+      TunnelsPath = "/etc/wireguard/"
+      IconPath    = "/opt/wireguird/Icon/"
+  )
+  ```
+</Accordion>
+
+<Accordion title="Error Handling">
+  Always handle errors explicitly. Don't ignore them:
+  
+  ```go
+  // Good
+  data, err := ioutil.ReadFile(path)
+  if err != nil {
+      log.Error().Err(err).Msg("failed to read file")
+      return err
+  }
+  
+  // Bad
+  data, _ := ioutil.ReadFile(path)
+  ```
+  
+  For user-facing errors, use the `ShowError()` function:
+  
+  ```go gui/gui.go:106-118
+  func ShowError(win *gtk.ApplicationWindow, err error, info ...string) {
+      if err == nil {
+          return
+      }
+  
+      glib.IdleAdd(func() {
+          wlog("ERROR", err.Error())
+          dlg := gtk.MessageDialogNew(win, gtk.DIALOG_MODAL, gtk.MESSAGE_ERROR, gtk.BUTTONS_OK, "%s", err.Error())
+          dlg.SetTitle("Error")
+          dlg.Run()
+          dlg.Destroy()
+      })
+  }
+  ```
+</Accordion>
+
+<Accordion title="Logging">
+  Use structured logging with `zerolog`:
+  
+  ```go
+  // Info level
+  log.Info().Str("tunnel", name).Msg("Connecting to tunnel")
+  
+  // Debug level
+  log.Debug().Interface("settings", s).Msg("loaded settings")
+  
+  // Error level
+  log.Error().Err(err).Msg("wg-quick down error")
+  ```
+  
+  For user-visible logs in the UI, use `wlog()`:
+  
+  ```go
+  wlog("INFO", "Connected to " + name)
+  wlog("ERROR", "Failed to connect")
+  ```
+</Accordion>
+
+### GTK-Specific Guidelines
+
+<Info>
+**Thread Safety**: GTK is not thread-safe. Always use `glib.IdleAdd()` when updating UI from goroutines.
+</Info>
+
+**Good - Thread-safe UI update:**
+
+```go gui/tunnels.go:868-871
+glib.IdleAdd(func() {
+    t.Peer.LatestHandshake.SetText(hs)
+    t.Peer.Transfer.SetText(transfer)
+})
+```
+
+**Bad - Direct UI update from goroutine:**
+
+```go
+// DON'T DO THIS
+go func() {
+    // This will cause crashes!
+    t.Peer.LatestHandshake.SetText(hs)
+}()
+```
+
+### Resource Management
+
+Always destroy GTK objects when done to prevent memory leaks:
+
+```go
+dlg := gtk.MessageDialogNew(...)
+defer dlg.Destroy()
+
+res := dlg.Run()
+// Use res
+```
+
+## Making Changes
+
+### Working with the UI (Glade)
+
+The UI is defined in `wireguird.glade`, an XML file created with Glade.
+
+<Steps>
+  <Step title="Install Glade">
+    ```bash
+    sudo apt-get install glade  # Ubuntu/Debian
+    sudo pacman -S glade         # Arch
+    sudo dnf install glade       # Fedora
+    ```
+  </Step>
+  
+  <Step title="Open the Glade File">
+    ```bash
+    glade wireguird.glade
+    ```
+  </Step>
+  
+  <Step title="Make UI Changes">
+    - Edit widgets, layouts, and properties
+    - Set widget IDs (used by `Builder.GetObject()`)
+    - Configure signals (e.g., "clicked", "activate")
+  </Step>
+  
+  <Step title="Save and Test">
+    Save the `.glade` file, then rebuild:
+    
+    ```bash
+    go generate ./...
+    go build -o wireguird .
+    sudo ./wireguird
+    ```
+  </Step>
+</Steps>
+
+<Note>
+**Widget IDs**: When adding new widgets, give them descriptive IDs in Glade. These IDs are used to access widgets in the code:
+
+```go
+button, err := get.Button("button_add_tunnel")
+label, err := get.Label("label_interface_status")
+```
+</Note>
+
+### Adding New Features
+
+When adding functionality, follow this pattern:
+
+<Steps>
+  <Step title="Add UI Elements">
+    If your feature needs UI components, add them in `wireguird.glade`
+  </Step>
+  
+  <Step title="Create Handler Functions">
+    Add event handlers in the appropriate file:
+    - Tunnel-related: `gui/tunnels.go`
+    - General UI: `gui/gui.go`
+    - Settings: `settings/settings.go`
+  </Step>
+  
+  <Step title="Connect Signals">
+    In the `Create()` method, connect your UI elements to handlers:
+    
+    ```go
+    btnMyFeature, err := get.Button("button_my_feature")
+    if err != nil {
+        return err
+    }
+    
+    btnMyFeature.Connect("clicked", func() {
+        // Your handler logic
+    })
+    ```
+  </Step>
+  
+  <Step title="Add Logging">
+    Include appropriate logging for debugging:
+    
+    ```go
+    log.Debug().Msg("My feature activated")
+    wlog("INFO", "Feature completed successfully")
+    ```
+  </Step>
+</Steps>
+
+### Adding Settings
+
+To add a new user setting:
+
+<Steps>
+  <Step title="Update Settings Struct">
+    Add your field to `settings/settings.go`:
+    
+    ```go settings/settings.go:14-19
+    type Settings struct {
+        MultipleTunnels bool
+        StartOnTray     bool
+        CheckUpdates    bool
+        Debug           bool
+        // Add your new setting
+        MyNewSetting    bool
+    }
+    ```
+  </Step>
+  
+  <Step title="Add UI Control">
+    Add a checkbox or other control in `wireguird.glade` in the settings window
+  </Step>
+  
+  <Step title="Update FromSettings()">
+    Load the setting from the struct to the UI (`gui/tunnels.go:885-910`):
+    
+    ```go
+    t.Settings.MyNewSetting, err = get.CheckButton("settings_my_new_setting")
+    if err != nil {
+        return err
+    }
+    t.Settings.MyNewSetting.SetActive(Settings.MyNewSetting)
+    ```
+  </Step>
+  
+  <Step title="Update ToSettings()">
+    Save the setting from the UI to the struct (`gui/tunnels.go:879-883`):
+    
+    ```go
+    Settings.MyNewSetting = t.Settings.MyNewSetting.GetActive()
+    ```
+  </Step>
+</Steps>
+
+The settings will automatically be persisted as JSON when the user clicks "Save" in the settings window.
+
+## Testing
+
+Currently, WireGuird doesn't have automated tests, but manual testing is essential.
+
+### Testing Checklist
+
+Before submitting a PR, test these core features:
+
+- [ ] **Tunnel scanning** - Does the app correctly list tunnels from `/etc/wireguard/`?
+- [ ] **Connection** - Can you activate a tunnel? Does the icon change?
+- [ ] **Disconnection** - Can you deactivate a tunnel?
+- [ ] **Multiple tunnels** - With the setting enabled, can you activate multiple tunnels?
+- [ ] **Single tunnel mode** - With the setting disabled, does activating a new tunnel disconnect the old one?
+- [ ] **Add tunnel** - Can you import `.conf` and `.zip` files?
+- [ ] **Delete tunnel** - Can you delete a tunnel?
+- [ ] **Edit tunnel** - Can you edit and save tunnel configurations?
+- [ ] **Export tunnels** - Can you export tunnels as a `.zip` file?
+- [ ] **Settings** - Do settings persist after closing the app?
+- [ ] **System tray** - Does the tray icon update correctly? Do tray menu items work?
+- [ ] **Window behavior** - Does "Start on tray" work? Does hiding/showing work?
+- [ ] **Update check** - Does the update checker work (may need to modify version)?
+
+### Testing Environment
+
+Create test tunnel configurations in `/etc/wireguard/`:
+
+```bash
+sudo nano /etc/wireguard/test_tunnel.conf
+```
+
+Example test configuration:
+
+```ini
+[Interface]
+PrivateKey = <your_private_key>
+Address = 10.0.0.2/24
+DNS = 1.1.1.1
+
+[Peer]
+PublicKey = <peer_public_key>
+AllowedIPs = 0.0.0.0/0
+Endpoint = vpn.example.com:51820
+PersistentKeepalive = 25
+```
+
+<Note>
+You can generate test keys with: `wg genkey | tee privatekey | wg pubkey > publickey`
+</Note>
+
+### Debugging
+
+Enable debug logging by creating a settings file:
+
+```bash
+cat > wireguird.settings << EOF
+{
+  "MultipleTunnels": false,
+  "StartOnTray": false,
+  "CheckUpdates": true,
+  "Debug": true
+}
+EOF
+```
+
+Then run with verbose output:
+
+```bash
+sudo ./wireguird 2>&1 | tee debug.log
+```
+
+## Submitting Pull Requests
+
+<Steps>
+  <Step title="Fork the Repository">
+    Click "Fork" on [GitHub](https://github.com/UnnoTed/wireguird) to create your own copy
+  </Step>
+  
+  <Step title="Create a Branch">
+    ```bash
+    git checkout -b feature/my-new-feature
+    ```
+    
+    Use descriptive branch names:
+    - `feature/add-auto-connect` - New features
+    - `fix/crash-on-disconnect` - Bug fixes
+    - `docs/update-readme` - Documentation
+  </Step>
+  
+  <Step title="Make Your Changes">
+    - Write clean, well-documented code
+    - Follow the code style guidelines
+    - Test your changes thoroughly
+  </Step>
+  
+  <Step title="Commit Your Changes">
+    ```bash
+    git add .
+    git commit -m "Add auto-connect feature for tunnels"
+    ```
+    
+    Write clear commit messages:
+    - Use present tense ("Add feature" not "Added feature")
+    - Be descriptive but concise
+    - Reference issues when applicable (`Fixes #123`)
+  </Step>
+  
+  <Step title="Push to Your Fork">
+    ```bash
+    git push origin feature/my-new-feature
+    ```
+  </Step>
+  
+  <Step title="Create Pull Request">
+    Go to the original repository and click "New Pull Request"
+    
+    **In your PR description, include:**
+    - What changes you made
+    - Why you made them
+    - How to test them
+    - Any relevant issue numbers
+    - Screenshots (for UI changes)
+  </Step>
+</Steps>
+
+### PR Example
+
+```markdown
+## Description
+Adds an auto-connect feature that automatically activates a specified tunnel on application startup.
+
+## Changes
+- Added `AutoConnectTunnel` setting to `Settings` struct
+- Added dropdown to settings window for selecting auto-connect tunnel
+- Implemented auto-connect logic in `gui.Create()`
+
+## Testing
+1. Open settings and select a tunnel for auto-connect
+2. Restart WireGuird
+3. Verify the tunnel is automatically activated
+
+## Related Issues
+Closes #42
+
+## Screenshots
+[Attach screenshot of settings window with new dropdown]
+```
+
+## Reporting Issues
+
+Found a bug? Have a feature request? [Create an issue](https://github.com/UnnoTed/wireguird/issues/new) on GitHub.
+
+### Bug Reports
+
+Include the following information:
+
+```markdown
+**Describe the bug**
+A clear description of what the bug is.
+
+**To Reproduce**
+Steps to reproduce:
+1. Go to '...'
+2. Click on '...'
+3. See error
+
+**Expected behavior**
+What you expected to happen.
+
+**Screenshots**
+If applicable, add screenshots.
+
+**Environment:**
+ - OS: [e.g. Ubuntu 22.04]
+ - WireGuird version: [e.g. 1.1.0]
+ - Go version: [e.g. 1.20]
+ - GTK version: [from the log output]
+
+**Logs**
+```
+Paste relevant log output here
+```
+
+**Additional context**
+Any other relevant information.
+```
+
+### Feature Requests
+
+```markdown
+**Is your feature request related to a problem?**
+A clear description of the problem.
+
+**Describe the solution you'd like**
+What you want to happen.
+
+**Describe alternatives you've considered**
+Other approaches you've thought about.
+
+**Additional context**
+Any other relevant information, mockups, or examples.
+```
+
+## Building Packages
+
+### Debian Package
+
+WireGuird includes a script to build `.deb` packages:
+
+```bash
+chmod +x package_deb.sh
+./package_deb.sh
+```
+
+This creates `wireguird_amd64.deb` in the current directory.
+
+The package structure is defined in the `deb/` directory:
+
+```
+deb/
+├── DEBIAN/
+│   └── control           # Package metadata
+└── opt/
+    └── wireguird/
+        ├── wireguird     # Binary
+        └── Icon/         # Icons
+```
+
+### Installing Locally
+
+For development, use the install script:
+
+```bash
+chmod +x install.sh
+sudo ./install.sh
+```
+
+This copies the binary to `/opt/wireguird/` and creates a desktop entry.
+
+## Additional Resources
+
+<CardGroup cols={2}>
+  <Card title="GitHub Repository" icon="github" href="https://github.com/UnnoTed/wireguird">
+    View source code and contribute
+  </Card>
+  <Card title="WireGuard Documentation" icon="book" href="https://www.wireguard.com/quickstart/">
+    Learn about WireGuard configuration
+  </Card>
+  <Card title="GTK 3 Documentation" icon="book" href="https://docs.gtk.org/gtk3/">
+    GTK 3 API reference
+  </Card>
+  <Card title="gotk3 Repository" icon="code" href="https://github.com/gotk3/gotk3">
+    Go bindings for GTK 3
+  </Card>
+</CardGroup>
+
+## Code of Conduct
+
+Be respectful and constructive in all interactions. WireGuird is a community project, and we want everyone to feel welcome.
+
+- **Be respectful** - Treat everyone with respect
+- **Be constructive** - Provide helpful feedback
+- **Be patient** - Maintainers are volunteers
+- **Be collaborative** - Work together to improve the project
+
+## Questions?
+
+If you have questions about contributing:
+
+1. Check existing [issues](https://github.com/UnnoTed/wireguird/issues) and [pull requests](https://github.com/UnnoTed/wireguird/pulls)
+2. Read the [README](https://github.com/UnnoTed/wireguird/blob/master/README.md)
+3. Ask in a new issue with the "question" label
+
+Thank you for contributing to WireGuird! 🎉

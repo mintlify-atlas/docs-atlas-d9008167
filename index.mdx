@@ -1,97 +1,123 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: "WireGuird - GTK GUI for WireGuard VPN"
+description: "A modern Linux desktop application for managing WireGuard VPN tunnels with system tray integration and an intuitive interface."
 ---
 
-## Setting up
+<div className="py-12 text-center">
+  <h1 className="text-5xl font-bold mb-4" style={{ color: '#891d22' }}>
+    WireGuird
+  </h1>
+  <p className="text-xl text-gray-600 mb-8">
+    A GTK GUI client for managing WireGuard VPN tunnels on Linux
+  </p>
+  <div className="flex gap-4 justify-center">
+    <a 
+      href="/installation" 
+      className="px-6 py-3 rounded font-semibold text-white"
+      style={{ backgroundColor: '#891d22' }}
+    >
+      Get Started
+    </a>
+    <a 
+      href="https://github.com/abejaranoh/wireguird" 
+      className="px-6 py-3 rounded font-semibold"
+      style={{ color: '#891d22', border: '2px solid #891d22' }}
+    >
+      View on GitHub
+    </a>
+  </div>
+</div>
 
-Get your documentation site up and running in minutes.
+## Features
 
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
+WireGuird brings the power of WireGuard VPN management to your Linux desktop with an intuitive graphical interface.
+
+<CardGroup cols={2}>
+  <Card title="System Tray Integration" icon="bell">
+    Color-coded tray icon shows connection status at a glance - red when connected, black when disconnected.
+  </Card>
+  <Card title="Visual Tunnel Management" icon="list">
+    Browse and manage all your WireGuard tunnels from /etc/wireguard in a clean, organized interface.
+  </Card>
+  <Card title="Built-in Tunnel Editor" icon="pen-to-square">
+    Edit tunnel configurations directly in the app with syntax highlighting for WireGuard config files.
+  </Card>
+  <Card title="Import & Export" icon="file-arrow-down">
+    Easily import tunnels from .conf or .zip files, and export your configurations for backup or sharing.
+  </Card>
+  <Card title="Multiple Connections" icon="network-wired">
+    Connect to multiple VPN tunnels simultaneously when you need access to different networks.
+  </Card>
+  <Card title="Real-time Statistics" icon="chart-line">
+    Monitor connection statistics, handshake times, and data transfer in real-time.
+  </Card>
+</CardGroup>
+
+## Quick Start
+
+Get WireGuird running on your Linux system in just a few minutes.
+
+<Steps>
+  <Step title="Download the Package">
+    Download the latest .deb package from the releases page for Ubuntu 22.04+, Linux Mint 21.1+, or compatible distributions.
+  </Step>
+  <Step title="Install WireGuird">
+    Install the package with dpkg and ensure you have the required dependencies installed.
+  </Step>
+  <Step title="Launch the Application">
+    Start WireGuird from your application menu or command line and begin managing your VPN tunnels.
+  </Step>
+</Steps>
+
+<Card title="Installation Guide" icon="rocket" href="/installation">
+  Follow the complete installation guide to get started
 </Card>
 
-## Make it yours
+## User Interface Preview
 
-Design a docs site that looks great and empowers your users.
+WireGuird provides a familiar Windows-like interface for Linux users, making WireGuard VPN management accessible and straightforward.
 
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
-  </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
-  </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
-  </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
-  </Card>
-</Columns>
+<Note>
+WireGuird looks and functions similarly to the official WireGuard Windows GUI client, providing a consistent experience across platforms.
+</Note>
 
-## Create beautiful pages
+## How It Works
 
-Everything you need to create world-class documentation.
+WireGuird acts as a graphical frontend for the standard WireGuard tools you already trust:
 
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
-  </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
-  </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
-  </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
+- Lists tunnel configurations from `/etc/wireguard`
+- Controls connections through `wg-quick` commands
+- Displays real-time statistics using the `wgctrl` library
+- Integrates seamlessly with your system tray for quick access
 
-## Need inspiration?
+<Info>
+WireGuird requires `wireguard-tools` to be installed on your system. The application uses standard WireGuard commands and follows Linux security best practices.
+</Info>
 
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+## What's Next?
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/installation">
+    Install WireGuird on your Linux system
+  </Card>
+  <Card title="Quick Start Guide" icon="play" href="/quickstart">
+    Learn the basics in 5 minutes
+  </Card>
+  <Card title="Managing Tunnels" icon="folder-tree" href="/user-guide/managing-tunnels">
+    Add, edit, and organize your VPN tunnels
+  </Card>
+  <Card title="Building from Source" icon="hammer" href="/advanced/building-from-source">
+    Compile WireGuird yourself
+  </Card>
+</CardGroup>
+
+## System Requirements
+
+- **Operating System**: Ubuntu 18.04+ (tested on 18.04, 20.04, 21.04, 22.04, 22.10, 23.04), Linux Mint 21.1+
+- **Desktop Environment**: GTK 3 compatible desktop (GNOME, XFCE, MATE, etc.)
+- **Dependencies**: wireguard-tools, libgtk-3, libayatana-appindicator3, resolvconf
+- **Architecture**: AMD64 (x86_64)
+
+<Warning>
+WireGuird requires root privileges to manage VPN connections through wg-quick. The application will prompt for authentication when needed.
+</Warning>

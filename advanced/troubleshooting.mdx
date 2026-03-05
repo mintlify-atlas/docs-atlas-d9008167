@@ -1,0 +1,423 @@
+---
+title: Troubleshooting
+description: Common issues and solutions for WireGuird
+---
+
+This guide covers common problems you may encounter while using WireGuird and their solutions.
+
+## Installation Issues
+
+### Package Installation Failures
+
+<AccordionGroup>
+  <Accordion title="dpkg: dependency problems">
+    **Error message:**
+    ```
+    dpkg: dependency problems prevent configuration of wireguird:
+    wireguird depends on wireguard-tools; however:
+    Package wireguard-tools is not installed.
+    ```
+
+    **Cause:** Missing runtime dependencies.
+
+    **Solution:**
+    ```bash
+    sudo apt install -f
+    ```
+
+    This command will install all missing dependencies automatically.
+  </Accordion>
+
+  <Accordion title="Package libayatana-appindicator3-1 is not available">
+    **Error message:**
+    ```
+    E: Package 'libayatana-appindicator3-1' has no installation candidate
+    ```
+
+    **Cause:** Your distribution may use a different package name or repository.
+
+    **Solution for Ubuntu 18.04:**
+    ```bash
+    sudo apt install libappindicator3-1
+    ```
+
+    **Solution for newer Ubuntu versions:**
+    ```bash
+    sudo add-apt-repository universe
+    sudo apt update
+    sudo apt install libayatana-appindicator3-1
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Permission and Access Issues
+
+### WireGuard Requires Root Permissions
+
+<Warning>
+WireGuard operations require root/superuser permissions. WireGuird uses `wg-quick` commands which need elevated privileges.
+</Warning>
+
+**Common error:**
+```
+Error: Operation not permitted
+wg-quick's output:
+Permission denied
+```
+
+**Solutions:**
+
+<Steps>
+  <Step title="Run WireGuird with sudo (not recommended)">
+    ```bash
+    sudo /opt/wireguird/wireguird
+    ```
+
+    <Note>
+    This is not recommended for regular use as it runs the entire GUI with root privileges.
+    </Note>
+  </Step>
+
+  <Step title="Configure PolicyKit (recommended)">
+    Create a PolicyKit rule to allow your user to run wg-quick without a password:
+
+    Create `/etc/polkit-1/rules.d/50-wireguard.rules`:
+
+    ```javascript
+    polkit.addRule(function(action, subject) {
+        if (action.id == "org.freedesktop.systemd1.manage-units" &&
+            action.lookup("unit").startsWith("wg-quick@") &&
+            subject.isInGroup("sudo")) {
+            return polkit.Result.YES;
+        }
+    });
+    ```
+  </Step>
+
+  <Step title="Add user to appropriate groups">
+    Some distributions require the user to be in specific groups:
+
+    ```bash
+    sudo usermod -aG sudo $USER
+    # Log out and back in for changes to take effect
+    ```
+  </Step>
+</Steps>
+
+### Cannot Access /etc/wireguard
+
+**Error:** WireGuird cannot read tunnel configurations.
+
+**Cause:** The `/etc/wireguard` directory has restrictive permissions.
+
+**Solution:**
+```bash
+sudo chmod 755 /etc/wireguard
+sudo chmod 644 /etc/wireguard/*.conf
+```
+
+<Note>
+Keep private keys secure! The `.conf` files contain sensitive information. Only make the directory readable, not the private key files themselves.
+</Note>
+
+## Tunnel Connection Issues
+
+### Tunnel Name Length Error
+
+**Error message:**
+```
+Tunnel's file name is too long (16), max length: 15
+```
+
+**Cause:** WireGuard interface names are limited to 15 characters maximum (Linux kernel limitation).
+
+**Solution:**
+Rename your tunnel configuration file to 15 characters or fewer:
+
+```bash
+sudo mv /etc/wireguard/my-very-long-tunnel-name.conf /etc/wireguard/mytunnel.conf
+```
+
+**Code reference:** This check is implemented in `gui/tunnels.go:217-219`
+
+### Connection Fails with wg-quick Errors
+
+<AccordionGroup>
+  <Accordion title="resolvconf: command not found">
+    **Error in wg-quick output:**
+    ```
+    /usr/bin/wg-quick: line 259: resolvconf: command not found
+    ```
+
+    **Cause:** The `resolvconf` package is not installed.
+
+    **Solution:**
+    ```bash
+    sudo apt install resolvconf
+    ```
+
+    See [Dependencies](/advanced/dependencies) for more information.
+  </Accordion>
+
+  <Accordion title="RTNETLINK answers: File exists">
+    **Error:**
+    ```
+    RTNETLINK answers: File exists
+    ```
+
+    **Cause:** The network interface or route already exists, possibly from a previous failed connection.
+
+    **Solution:**
+    ```bash
+    # List WireGuard interfaces
+    sudo wg show
+
+    # Manually bring down the interface
+    sudo wg-quick down <tunnel-name>
+
+    # Try connecting again through WireGuird
+    ```
+  </Accordion>
+
+  <Accordion title="Unable to access peer">
+    **Symptoms:** Connection establishes but no data flows.
+
+    **Possible causes:**
+    1. Incorrect peer endpoint
+    2. Firewall blocking UDP traffic
+    3. NAT traversal issues
+
+    **Solutions:**
+
+    **Check peer endpoint:**
+    ```bash
+    sudo wg show <tunnel-name>
+    ```
+
+    **Verify UDP port is not blocked:**
+    ```bash
+    # Check if listening (on server)
+    sudo ss -ulnp | grep <port>
+
+    # Test connectivity (from client)
+    nc -u -v <server-ip> <port>
+    ```
+
+    **Check firewall rules:**
+    ```bash
+    sudo ufw status
+    # If using ufw, allow the WireGuard port:
+    sudo ufw allow <port>/udp
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## GUI and Display Issues
+
+### Application Doesn't Start
+
+<AccordionGroup>
+  <Accordion title="Failed to connect to X server">
+    **Error:**
+    ```
+    cannot open display:
+    ```
+
+    **Cause:** Running WireGuird over SSH or without a display.
+
+    **Solution:**
+    If using SSH, enable X11 forwarding:
+    ```bash
+    ssh -X user@host
+    /opt/wireguird/wireguird
+    ```
+  </Accordion>
+
+  <Accordion title="GTK version errors">
+    **Error:**
+    ```
+    GTK+ version too old
+    ```
+
+    **Cause:** GTK+ 3 is not installed or is an incompatible version.
+
+    **Solution:**
+    ```bash
+    sudo apt install libgtk-3-0
+    ```
+
+    Check GTK version:
+    ```bash
+    dpkg -l | grep libgtk-3
+    ```
+  </Accordion>
+
+  <Accordion title="System tray icon not appearing">
+    **Cause:** Missing AppIndicator support in your desktop environment.
+
+    **Solution:**
+
+    For Ubuntu/GNOME:
+    ```bash
+    sudo apt install gnome-shell-extension-appindicator
+    gnome-extensions enable ubuntu-appindicators@ubuntu.com
+    ```
+
+    For other desktop environments, ensure system tray/indicator support is enabled.
+  </Accordion>
+</AccordionGroup>
+
+### Icons Not Displaying
+
+**Symptoms:** Missing or broken icons in the interface.
+
+**Cause:** Icon files are not in the expected location.
+
+**Solution:**
+```bash
+# Verify icon directory exists
+ls /opt/wireguird/Icon/
+
+# If missing, reinstall the package
+sudo apt install --reinstall wireguird
+```
+
+## Configuration Issues
+
+### Settings Not Persisting
+
+**Symptoms:** Settings reset after restarting WireGuird.
+
+**Cause:** Settings file is not writable or in the wrong location.
+
+**Solution:**
+```bash
+# Check settings file location
+ls -l /opt/wireguird/wireguird.settings
+
+# Ensure it's writable
+sudo chmod 644 /opt/wireguird/wireguird.settings
+sudo chown $USER:$USER /opt/wireguird/wireguird.settings
+```
+
+### Cannot Import Tunnel Configuration
+
+**Error:** "Add tunnel error"
+
+**Possible causes:**
+1. Invalid configuration file format
+2. Missing required fields
+3. Permission issues
+
+**Solutions:**
+
+**Validate configuration:**
+```bash
+# Test with wg-quick directly
+sudo wg-quick up /path/to/config.conf
+```
+
+**Check configuration format:**
+Ensure your `.conf` file follows the correct format:
+
+```ini
+[Interface]
+PrivateKey = <key>
+Address = 10.0.0.2/24
+DNS = 1.1.1.1
+
+[Peer]
+PublicKey = <key>
+Endpoint = server.example.com:51820
+AllowedIPs = 0.0.0.0/0
+```
+
+## Logging and Diagnostics
+
+### Enable Debug Logging
+
+WireGuird uses `zerolog` for logging. View logs by running from terminal:
+
+```bash
+/opt/wireguird/wireguird 2>&1 | tee wireguird.log
+```
+
+### Check WireGuard Status
+
+```bash
+# Show all interfaces
+sudo wg show
+
+# Show specific interface
+sudo wg show <tunnel-name>
+
+# Show with extended information
+sudo wg show all dump
+```
+
+### System Journal Logs
+
+```bash
+# View WireGuard-related journal entries
+sudo journalctl -u wg-quick@*
+
+# Follow logs in real-time
+sudo journalctl -u wg-quick@<tunnel-name> -f
+```
+
+## Performance Issues
+
+### High CPU Usage
+
+**Possible causes:**
+1. Excessive logging
+2. Continuous connection attempts
+3. Large number of peers
+
+**Solutions:**
+- Reduce logging verbosity
+- Check for connection loops
+- Optimize peer configurations
+
+### Slow Connection Speeds
+
+**Diagnostic steps:**
+
+```bash
+# Check MTU settings
+sudo wg show <tunnel-name>
+ip link show <tunnel-name>
+
+# Test throughput
+iperf3 -c <peer-ip>
+```
+
+**Solutions:**
+- Adjust MTU in tunnel configuration (typically 1420 for WireGuard)
+- Verify no packet loss: `ping -c 100 <peer-ip>`
+- Check for CPU bottlenecks on either endpoint
+
+## Getting More Help
+
+If you're still experiencing issues:
+
+1. **Check existing issues:** [GitHub Issues](https://github.com/UnnoTed/wireguird/issues)
+2. **Create a new issue:** Include:
+   - Your distribution and version
+   - WireGuird version
+   - Error messages (full output)
+   - Steps to reproduce
+   - Output of `wg show` (remove sensitive keys)
+
+3. **Collect diagnostic information:**
+   ```bash
+   # System info
+   lsb_release -a
+   uname -r
+   
+   # Package versions
+   dpkg -l | grep -E 'wireguard|gtk|appindicator'
+   
+   # WireGuard status
+   sudo wg show all
+   ```

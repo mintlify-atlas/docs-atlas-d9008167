@@ -1,0 +1,262 @@
+---
+title: Connecting to Tunnels
+description: Learn how to activate and deactivate WireGuard tunnels, understand connection status, and manage multiple simultaneous connections
+---
+
+## Overview
+
+WireGuird uses the `wg-quick` command-line tool to activate and deactivate WireGuard tunnels. The application provides a graphical interface for managing tunnel connections with real-time status monitoring.
+
+## Activating a Tunnel
+
+Connecting to a WireGuard VPN tunnel is straightforward:
+
+<Steps>
+  <Step title="Select a tunnel">
+    Click on a tunnel from the tunnel list. The tunnel details panel populates with configuration information.
+  </Step>
+  
+  <Step title="Click Activate">
+    Click the **Activate** button (button_change_state). The button label changes based on the tunnel's current state.
+  </Step>
+  
+  <Step title="Connection established">
+    WireGuird executes `wg-quick up [tunnel-name]` and displays:
+    - Green connection icon next to the tunnel name
+    - "Connected to [tunnel-name]" in the header subtitle
+    - System tray icon changes to `wg_connected`
+    - Log entry: "Connected to [tunnel-name]"
+  </Step>
+</Steps>
+
+### Behind the Scenes
+
+When you activate a tunnel, WireGuird executes:
+
+```bash
+wg-quick up [tunnel-name]
+```
+
+This command:
+- Creates a network interface with the tunnel name
+- Configures the interface with the IP address from your configuration
+- Sets up routing rules based on `AllowedIPs`
+- Executes any `PostUp` commands defined in your configuration
+
+<Info>
+The application logs all `wg-quick` output to the WireGuard logs panel, including any errors or status messages.
+</Info>
+
+## Deactivating a Tunnel
+
+Disconnecting from an active tunnel:
+
+<Steps>
+  <Step title="Select the active tunnel">
+    Click on the connected tunnel in the tunnel list (shown with a green icon).
+  </Step>
+  
+  <Step title="Click Deactivate">
+    The button label shows **Deactivate** for active tunnels. Click it to disconnect.
+  </Step>
+  
+  <Step title="Disconnection complete">
+    WireGuird executes `wg-quick down [tunnel-name]` and displays:
+    - Gray connection icon next to the tunnel name
+    - "Not connected!" in the header subtitle (if no other tunnels are active)
+    - System tray icon changes to `wireguard_off`
+    - Log entry: "Disconnected from [tunnel-name]"
+  </Step>
+</Steps>
+
+### Disconnect Command
+
+```bash
+wg-quick down [tunnel-name]
+```
+
+This command:
+- Removes the network interface
+- Clears routing rules
+- Executes any `PreDown` commands from your configuration
+- Terminates the secure connection to the peer
+
+## Understanding Connection Status
+
+WireGuird provides multiple indicators for tunnel connection status:
+
+### Visual Indicators
+
+| Indicator | Status | Description |
+|-----------|--------|-------------|
+| Green dot | Active | Tunnel is connected and interface is up |
+| Gray dot | Inactive | Tunnel is configured but not connected |
+| Header subtitle | Connection info | Shows "Connected to [name(s)]" or "Not connected!" |
+| System tray icon | Overall status | `wg_connected` when any tunnel is active, `wireguard_off` otherwise |
+| Button label | Available action | Shows "Activate", "Deactivate", or "unknown" |
+
+### Interface Information Panel
+
+When a tunnel is selected and active, the interface panel displays:
+
+```
+Status: Active
+Public Key: [your-interface-public-key]
+Listen Port: [configured-port]
+Addresses: [configured-ip-addresses]
+DNS Servers: [configured-dns-servers]
+```
+
+<Note>
+For inactive tunnels, the interface panel shows configuration values from the `.conf` file. The public key and listen port are only available when the tunnel is active.
+</Note>
+
+### Peer Information Panel
+
+For active tunnels, real-time peer information is displayed:
+
+```
+Public Key: [peer-public-key]
+Endpoint: [peer-server:port]
+Allowed IPs: [allowed-ip-ranges]
+Latest Handshake: [time-since-last-handshake]
+Transfer: [received-bytes] received, [sent-bytes] sent
+```
+
+#### Real-Time Statistics
+
+WireGuird updates peer statistics every second for the selected active tunnel:
+
+```go
+// Source: gui/tunnels.go:867-871
+for _, p := range d.Peers {
+    hs := humanize.Time(p.LastHandshakeTime)
+    t.Peer.LatestHandshake.SetText(hs)
+    t.Peer.Transfer.SetText(humanize.Bytes(uint64(p.ReceiveBytes)) + 
+        " received, " + humanize.Bytes(uint64(p.TransmitBytes)) + " sent")
+}
+```
+
+- **Latest Handshake**: Shows human-readable time (e.g., "2 minutes ago", "30 seconds ago")
+- **Transfer**: Displays data transfer in human-readable format (e.g., "1.2 MB received, 450 KB sent")
+
+<Info>
+Statistics only update when the main window has focus and a tunnel is selected. The update ticker runs every second in the background.
+</Info>
+
+## Multiple Tunnel Connections
+
+WireGuird can manage multiple simultaneous VPN connections, but this behavior is controlled by a setting.
+
+### Single Tunnel Mode (Default)
+
+When **Multiple Tunnels** is disabled (default):
+
+1. Activating a new tunnel automatically deactivates all other active tunnels
+2. Only one VPN connection is active at a time
+3. The header shows: "Connected to [single-tunnel-name]"
+
+```go
+// Source: gui/tunnels.go:262-268
+if !Settings.MultipleTunnels {
+    for _, d := range list {
+        if err := dc(d); err != nil {
+            return err
+        }
+    }
+}
+```
+
+### Multiple Tunnel Mode
+
+When **Multiple Tunnels** is enabled in settings:
+
+1. Multiple tunnels can be active simultaneously
+2. Each tunnel maintains its own network interface
+3. The header shows: "Connected to [tunnel1], [tunnel2], [tunnel3]"
+4. Clicking **Deactivate** only disconnects the selected tunnel
+
+<Warning>
+Running multiple tunnels simultaneously can create complex routing situations. Ensure your `AllowedIPs` configurations don't conflict, or you may experience unexpected routing behavior.
+</Warning>
+
+### Checking Active Tunnels
+
+The application tracks active tunnels by querying the WireGuard control interface:
+
+```go
+// Source: gui/tunnels.go:1129-1138
+func (t *Tunnels) ActiveDeviceName() []string {
+    ds, _ := wgc.Devices()
+    var names []string
+    for _, d := range ds {
+        names = append(names, d.Name)
+    }
+    return names
+}
+```
+
+This ensures the connection status is always accurate based on actual network interfaces.
+
+## Connection Logs
+
+All connection and disconnection events are logged to the WireGuard logs panel:
+
+```
+[05/Mar/26 14:32:15 UTC][INFO]: Connected to office-vpn
+[05/Mar/26 14:45:22 UTC][INFO]: Disconnected from office-vpn
+[05/Mar/26 14:45:30 UTC][ERROR]: wg-quick's output:
+[error details]
+```
+
+Logs include:
+- Timestamps in `[DD/MMM/YY HH:MM:SS TZ]` format
+- Log level (`INFO` or `ERROR` in red)
+- Connection status changes
+- Any errors from `wg-quick` with full output
+
+<Tip>
+Check the logs panel if a connection fails. WireGuird displays the complete `wg-quick` error output to help diagnose configuration problems.
+</Tip>
+
+## Troubleshooting Connection Issues
+
+### Tunnel Name Too Long Error
+
+If you see an error like "Tunnel's file name is too long (16), max length: 15":
+
+- The tunnel name must be 15 characters or fewer
+- Rename the tunnel configuration file in `/etc/wireguard/`
+- Or use the editor to rename it to a shorter name
+
+See [Managing Tunnels - Tunnel Naming Requirements](/user-guide/managing-tunnels#tunnel-naming-requirements) for details.
+
+### wg-quick Errors
+
+If `wg-quick` fails, error messages appear in:
+
+1. An error dialog with the full error message
+2. The WireGuard logs panel with the complete output
+3. Common issues include:
+   - Invalid private/public keys
+   - Network interface already exists
+   - Permission denied (requires root/sudo)
+   - Invalid IP address configuration
+   - DNS resolution failures for endpoints
+
+### Statistics Not Updating
+
+If peer statistics aren't updating:
+
+- Ensure the main window has focus (statistics only update when focused)
+- Verify the tunnel is actually active (green icon)
+- Check if handshake time is recent (should be within a few minutes)
+- Look for error messages in the logs
+
+## Keyboard Shortcuts
+
+- **F5**: Refresh tunnel list and rescan `/etc/wireguard/`
+
+<Note>
+The **Activate/Deactivate** button changes its label dynamically based on the selected tunnel's current state, making it clear what action will be performed.
+</Note>

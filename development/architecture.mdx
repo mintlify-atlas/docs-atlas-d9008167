@@ -1,0 +1,660 @@
+---
+title: 'Architecture'
+description: 'Learn about WireGuird code structure, main components, and how the application works'
+---
+
+## Overview
+
+WireGuird is a GTK-based GUI application written in Go that provides a graphical interface for managing WireGuard VPN tunnels on Linux. The application follows a modular architecture with clear separation between UI management, settings persistence, and WireGuard control.
+
+## Project Structure
+
+The codebase is organized into the following main packages:
+
+<CardGroup cols={3}>
+  <Card title="main" icon="rocket">
+    Application entry point and window initialization
+  </Card>
+  <Card title="gui" icon="window-maximize">
+    UI logic, event handling, and tunnel management
+  </Card>
+  <Card title="settings" icon="gear">
+    Configuration persistence and user preferences
+  </Card>
+</CardGroup>
+
+### Directory Layout
+
+```
+wireguird/
+├── main.go                 # Application entry point
+├── gui/
+│   ├── gui.go             # Core GUI initialization
+│   ├── tunnels.go         # Tunnel management logic
+│   └── get/
+│       ├── gtk.go         # GTK widget accessor helpers
+│       └── generator/     # Code generation for GTK helpers
+├── settings/
+│   └── settings.go        # Settings struct and persistence
+├── static/
+│   └── ab0x.go           # Embedded resources (fileb0x)
+├── wireguird.glade        # GTK UI layout definition
+└── Icon/                  # Application icons
+```
+
+## Core Components
+
+### Application Entry Point (main.go)
+
+The application starts in `main.go`, which handles:
+
+<Steps>
+  <Step title="Logger Initialization">
+    Sets up structured logging using zerolog with a colored console writer
+    
+    ```go main.go:21
+    log.Logger = log.Output(horizontal.ConsoleWriter{Out: os.Stderr})
+    ```
+  </Step>
+  
+  <Step title="Settings Load">
+    Loads user settings from disk before creating the UI
+    
+    ```go main.go:24-26
+    if err := gui.Settings.Load(); err != nil {
+        log.Error().Err(err).Msg("error initial settings load")
+    }
+    ```
+  </Step>
+  
+  <Step title="GTK Application">
+    Creates a GTK application with the ID `com.wireguard.desktop`
+    
+    ```go main.go:28-33
+    const appID = "com.wireguard.desktop"
+    application, err := gtk.ApplicationNew(appID, glib.APPLICATION_FLAGS_NONE)
+    if err != nil {
+        log.Error().Err(err).Msg("error creating application")
+        return
+    }
+    ```
+  </Step>
+  
+  <Step title="Activate Handler">
+    Connects to the "activate" signal to create the main window
+    
+    ```go main.go:35-39
+    application.Connect("activate", func() {
+        if err := createWindow(application); err != nil {
+            log.Error().Err(err).Msg("create window error")
+        }
+    })
+    ```
+  </Step>
+</Steps>
+
+#### Window Creation
+
+The `createWindow()` function (`main.go:86-154`) handles:
+
+1. **Loading the Glade UI file** from embedded resources
+2. **Building the GTK interface** using `gtk.Builder`
+3. **Creating the system tray** indicator
+4. **Initializing the GUI** components via `gui.Create()`
+5. **Applying CSS styles** to the window
+
+```go main.go:87-94
+data, err := static.ReadFile("wireguird.glade")
+if err != nil {
+    log.Error().Err(err).Msg("cant read wireguird.glade")
+    return err
+}
+
+b, err := gtk.BuilderNew()
+b.AddFromString(string(data))
+```
+
+#### System Tray Integration
+
+The `createTray()` function (`main.go:44-84`) creates a system tray indicator using `go-appindicator`:
+
+```go main.go:60-65
+indicator := appindicator.New(application.GetApplicationID(), "wireguard_off", appindicator.CategoryApplicationStatus)
+indicator.SetIconThemePath("/opt/wireguird/Icon")
+indicator.SetTitle("Wireguird")
+indicator.SetStatus(appindicator.StatusActive)
+indicator.SetMenu(menu)
+```
+
+The indicator displays connection status and provides menu items for "Show" and "Quit" actions.
+
+### GUI Package (gui/)
+
+The `gui` package contains the core application logic for managing the user interface and WireGuard tunnels.
+
+#### Key Constants (gui/gui.go)
+
+```go gui/gui.go:17-22
+const (
+    Version     = "1.1.0"
+    Repo        = "https://github.com/UnnoTed/wireguird"
+    TunnelsPath = "/etc/wireguard/"
+    IconPath    = "/opt/wireguird/Icon/"
+)
+```
+
+#### Global State (gui/gui.go)
+
+The package maintains several global variables for UI components and WireGuard control:
+
+```go gui/gui.go:24-34
+var (
+    settingsWindow *gtk.Window
+    editorWindow   *gtk.Window
+    application    *gtk.Application
+    indicator      *appindicator.Indicator
+    builder        *gtk.Builder
+    window         *gtk.ApplicationWindow
+    header         *gtk.HeaderBar
+    wgc            *wgctrl.Client     // WireGuard control client
+    updateTicker   *time.Ticker
+)
+```
+
+<Note>
+The `wgc` variable is a WireGuard control client from `golang.zx2c4.com/wireguard/wgctrl`, which provides programmatic access to WireGuard interfaces and configuration.
+</Note>
+
+#### GUI Initialization (gui.Create)
+
+The `Create()` function (`gui/gui.go:36-104`) is the main GUI initialization entry point:
+
+```go gui/gui.go:36-53
+func Create(app *gtk.Application, b *gtk.Builder, w *gtk.ApplicationWindow, ind *appindicator.Indicator) error {
+    application = app
+    get.Builder = b
+    indicator = ind
+    builder = b
+    window = w
+
+    var err error
+    header, err = get.HeaderBar("main_header")
+    if err != nil {
+        return err
+    }
+
+    wgc, err = wgctrl.New()
+    if err != nil {
+        ShowError(w, err)
+        return err
+    }
+    // ...
+}
+```
+
+Key initialization steps:
+
+1. **WireGuard Client Setup** - Creates a `wgctrl.Client` to interact with WireGuard
+2. **Device Detection** - Checks for active WireGuard devices and updates the UI accordingly
+3. **Window Creation** - Initializes editor and settings windows (hidden by default)
+4. **Tunnel Management** - Creates the `Tunnels` struct and calls `Create()`
+5. **Update Checker** - Starts a background goroutine to check for updates every 24 hours
+
+#### Tunnels Management (gui/tunnels.go)
+
+The `Tunnels` struct is the heart of the application, managing tunnel state and UI interaction:
+
+```go gui/tunnels.go:42-70
+type Tunnels struct {
+    Interface struct {
+        Status     *gtk.Label
+        PublicKey  *gtk.Label
+        ListenPort *gtk.Label
+        Addresses  *gtk.Label
+        DNS        *gtk.Label
+    }
+
+    Peer struct {
+        PublicKey       *gtk.Label
+        AllowedIPs      *gtk.Label
+        Endpoint        *gtk.Label
+        LatestHandshake *gtk.Label
+        Transfer        *gtk.Label
+    }
+
+    Settings struct {
+        MultipleTunnels *gtk.CheckButton
+        StartOnTray     *gtk.CheckButton
+        CheckUpdates    *gtk.CheckButton
+    }
+
+    ButtonChangeState *gtk.Button
+    icons             map[string]*gtk.Image
+    ticker            *time.Ticker
+    lastSelected      string
+}
+```
+
+<Accordion title="Tunnels.Create() - Main Setup Function">
+The `Create()` method (`gui/tunnels.go:72-877`) is extensive and handles:
+
+- **Tunnel Scanning** - Reads `.conf` files from `/etc/wireguard/`
+- **Button Handlers** - Add, delete, edit, zip tunnels
+- **Connection Toggle** - Activate/deactivate tunnels using `wg-quick`
+- **Real-time Updates** - Background ticker to update transfer statistics
+- **Settings Sync** - Bi-directional binding between UI and settings
+
+This method is over 800 lines and contains all the event handlers for the application.
+</Accordion>
+
+#### Key Operations
+
+**Scanning Tunnels** (`gui/tunnels.go:988-1105`)
+
+```go gui/tunnels.go:988-1003
+func (t *Tunnels) ScanTunnels() error {
+    var err error
+    var configList []string
+    list, err := dry.ListDirFiles(TunnelsPath)
+    if err != nil {
+        return err
+    }
+
+    for _, fileName := range list {
+        if !strings.HasSuffix(fileName, ".conf") {
+            continue
+        }
+
+        configList = append(configList, strings.TrimSuffix(fileName, ".conf"))
+    }
+    // ... builds UI rows for each tunnel
+}
+```
+
+**Connecting/Disconnecting** (`gui/tunnels.go:196-329`)
+
+The button click handler uses `wg-quick` to manage tunnel state:
+
+```go gui/tunnels.go:232-241
+// Disconnect
+c := exec.Command("wg-quick", "down", d.Name)
+output, err := c.Output()
+// ...
+
+// Connect
+c := exec.Command("wg-quick", "up", name)
+output, err := c.Output()
+```
+
+<Info>
+WireGuird uses `wg-quick` as a subprocess rather than directly manipulating WireGuard interfaces. This ensures compatibility with existing tunnel configurations and leverages `wg-quick`'s DNS and routing management.
+</Info>
+
+#### GTK Widget Helpers (gui/get/gtk.go)
+
+The `get` package provides type-safe accessor functions for retrieving GTK widgets from the builder:
+
+```go gui/get/gtk.go:11-23
+func ApplicationWindow(name string) (*gtk.ApplicationWindow, error) {
+    obj, err := Builder.GetObject(name)
+    if err != nil {
+        return nil, err
+    }
+
+    applicationwindow1, ok := obj.(*gtk.ApplicationWindow)
+    if !ok {
+        return nil, errors.New("cant get *gtk.ApplicationWindow: " + name)
+    }
+
+    return applicationwindow1, nil
+}
+```
+
+This pattern is repeated for all GTK widget types: `Button`, `Label`, `Entry`, `ListBox`, `TextView`, etc.
+
+<Note>
+These helper functions are auto-generated using `go generate` (see `main.go:1`). This ensures type safety when accessing widgets defined in the Glade file.
+</Note>
+
+### Settings Package (settings/)
+
+The `settings` package handles user preferences and persistence.
+
+#### Settings Structure
+
+```go settings/settings.go:14-19
+type Settings struct {
+    MultipleTunnels bool
+    StartOnTray     bool
+    CheckUpdates    bool
+    Debug           bool
+}
+```
+
+#### Persistence
+
+Settings are stored as JSON in `./wireguird.settings`:
+
+```go settings/settings.go:44-56
+func (s *Settings) Save() error {
+    log.Debug().Msg("saving settings")
+    data, err := json.Marshal(s)
+    if err != nil {
+        return err
+    }
+
+    if err := ioutil.WriteFile(FilePath, data, 0660); err != nil {
+        return err
+    }
+
+    log.Debug().Msg("saved settings")
+    return nil
+}
+```
+
+The `Load()` function reads the settings file and unmarshals the JSON:
+
+```go settings/settings.go:59-80
+func (s *Settings) Load() error {
+    log.Debug().Msg("loading settings")
+    if !dry.FileExists(FilePath) {
+        log.Debug().Msg("settings file doesnt exist")
+        return nil
+    }
+
+    data, err := ioutil.ReadFile(FilePath)
+    if err != nil {
+        return err
+    }
+
+    settings := &Settings{}
+    if err := json.Unmarshal(data, &settings); err != nil {
+        return err
+    }
+
+    *s = *settings
+
+    log.Debug().Interface("settings", s).Msg("loaded settings")
+    return nil
+}
+```
+
+## GTK Integration
+
+WireGuird uses the `gotk3` bindings to interact with GTK 3. The UI layout is defined in `wireguird.glade`, which is an XML file created with Glade (a GTK UI designer).
+
+### UI Loading Flow
+
+<Steps>
+  <Step title="Embed Glade File">
+    The `.glade` file is embedded into the binary using `fileb0x` (see `main.go:2`)
+  </Step>
+  
+  <Step title="Read from Embedded Resources">
+    At runtime, read the embedded Glade XML
+    
+    ```go
+    data, err := static.ReadFile("wireguird.glade")
+    ```
+  </Step>
+  
+  <Step title="Create Builder">
+    Create a `gtk.Builder` and load the UI definition
+    
+    ```go
+    b, err := gtk.BuilderNew()
+    b.AddFromString(string(data))
+    ```
+  </Step>
+  
+  <Step title="Access Widgets">
+    Use `Builder.GetObject()` to retrieve widgets by their Glade ID
+    
+    ```go
+    wobj, err := b.GetObject("main_window")
+    win := wobj.(*gtk.ApplicationWindow)
+    ```
+  </Step>
+</Steps>
+
+### Signal Handling
+
+GTK uses signals for event handling. WireGuird connects to signals using the `Connect()` method:
+
+```go gui/tunnels.go:196
+t.ButtonChangeState.Connect("clicked", func() {
+    // Handle activate/deactivate button click
+})
+```
+
+Common signals used:
+- `"clicked"` - Button clicks
+- `"activate"` - Menu item activation, row selection
+- `"changed"` - Text entry or checkbox changes
+- `"destroy"` - Window close events
+- `"key-press-event"` - Keyboard shortcuts (e.g., F5 to refresh)
+
+## WireGuard Control
+
+WireGuird uses two mechanisms to control WireGuard:
+
+### 1. wgctrl Library (Read Operations)
+
+For reading WireGuard state, the application uses `golang.zx2c4.com/wireguard/wgctrl`:
+
+```go gui/gui.go:49-53
+wgc, err = wgctrl.New()
+if err != nil {
+    ShowError(w, err)
+    return err
+}
+```
+
+**Getting Active Devices:**
+
+```go gui/tunnels.go:1129-1138
+func (t *Tunnels) ActiveDeviceName() []string {
+    ds, _ := wgc.Devices()
+
+    var names []string
+    for _, d := range ds {
+        names = append(names, d.Name)
+    }
+
+    return names
+}
+```
+
+**Reading Device Information:**
+
+```go gui/tunnels.go:857-872
+d, err := wgc.Device(name)
+if err != nil {
+    log.Error().Err(err).Msg("wgc get device err")
+    continue
+}
+
+t.Interface.PublicKey.SetText(d.Public Key.String())
+t.Interface.ListenPort.SetText(strconv.Itoa(d.ListenPort))
+
+for _, p := range d.Peers {
+    hs := humanize.Time(p.LastHandshakeTime)
+    glib.IdleAdd(func() {
+        t.Peer.LatestHandshake.SetText(hs)
+        t.Peer.Transfer.SetText(humanize.Bytes(uint64(p.ReceiveBytes)) + " received, " + humanize.Bytes(uint64(p.TransmitBytes)) + " sent")
+    })
+}
+```
+
+### 2. wg-quick Command (Write Operations)
+
+For activating and deactivating tunnels, WireGuird shells out to `wg-quick`:
+
+```go gui/tunnels.go:232-241
+// Disconnect
+c := exec.Command("wg-quick", "down", d.Name)
+output, err := c.Output()
+if err != nil {
+    es := string(err.(*exec.ExitError).Stderr)
+    log.Error().Err(err).Str("output", string(output)).Str("error", es).Msg("wg-quick down error")
+    // ...
+}
+```
+
+```go gui/tunnels.go:286-295
+// Connect
+c := exec.Command("wg-quick", "up", name)
+output, err := c.Output()
+if err != nil {
+    es := string(err.(*exec.ExitError).Stderr)
+    log.Error().Err(err).Str("output", string(output)).Str("error", es).Msg("wg-quick up error")
+    // ...
+}
+```
+
+<Info>
+Using `wg-quick` ensures that DNS settings, routing rules, and pre/post scripts defined in the tunnel configuration are properly executed. This matches the behavior of the command-line WireGuard tools.
+</Info>
+
+## Resource Embedding
+
+WireGuird embeds static resources (UI files, icons) into the binary using `fileb0x`.
+
+### Build-time Generation
+
+The `go:generate` directives in `main.go:1-2` run code generators:
+
+```go main.go:1-2
+//go:generate go run ./gui/get/generator/generator.go -target=./gui/get
+//go:generate go run github.com/UnnoTed/fileb0x fileb0x.toml
+```
+
+1. **GTK Helper Generator** - Generates the `gui/get/gtk.go` widget accessor functions
+2. **fileb0x** - Embeds files specified in `fileb0x.toml` into `static/ab0x.go`
+
+### Runtime Access
+
+Embedded files are accessed through the `static` package:
+
+```go main.go:87-90
+data, err := static.ReadFile("wireguird.glade")
+if err != nil {
+    log.Error().Err(err).Msg("cant read wireguird.glade")
+    return err
+}
+```
+
+## Logging
+
+WireGuird uses `zerolog` for structured logging with different levels (debug, info, error).
+
+### Log Configuration
+
+```go main.go:21-22
+log.Logger = log.Output(horizontal.ConsoleWriter{Out: os.Stderr})
+log.Info().Uint("major", gtk.GetMajorVersion()).Uint("minor", gtk.GetMinorVersion()).Uint("micro", gtk.GetMicroVersion()).Msg("GTK Version")
+```
+
+The `horizontal` package provides a colored console writer for better readability.
+
+### Debug Mode
+
+The debug level is controlled by the `Debug` setting:
+
+```go settings/settings.go:35-39
+if s.Debug {
+    zerolog.SetGlobalLevel(zerolog.DebugLevel)
+} else {
+    zerolog.SetGlobalLevel(zerolog.InfoLevel)
+}
+```
+
+### User-Facing Logs
+
+WireGuird also displays logs in the UI via the `wlog()` function (`gui/tunnels.go:1140-1165`):
+
+```go gui/tunnels.go:1140-1165
+func wlog(t string, text string) error {
+    wlogs, err := get.ListBox("wireguard_logs")
+    if err != nil {
+        return err
+    }
+
+    l, err := gtk.LabelNew("")
+    if err != nil {
+        return err
+    }
+
+    if t == "ERROR" {
+        t = `<span color="#FF0000">` + t + "</span>"
+    }
+
+    l.SetMarkup(`<span color="#008080">[` + time.Now().Format("02/Jan/06 15:04:05 MST") + `]</span>[` + t + `]: ` + text)
+    l.SetHExpand(true)
+    l.SetHAlign(gtk.ALIGN_START)
+
+    glib.IdleAdd(func() {
+        l.Show()
+        wlogs.Add(l)
+    })
+
+    return nil
+}
+```
+
+This creates colored log entries in the UI's log panel.
+
+## Concurrency and Thread Safety
+
+GTK is not thread-safe, so all UI updates must happen on the main GTK thread. WireGuird uses `glib.IdleAdd()` to schedule UI updates from background goroutines:
+
+```go gui/tunnels.go:868-871
+glib.IdleAdd(func() {
+    t.Peer.LatestHandshake.SetText(hs)
+    t.Peer.Transfer.SetText(humanize.Bytes(uint64(p.ReceiveBytes)) + " received, " + humanize.Bytes(uint64(p.TransmitBytes)) + " sent")
+})
+```
+
+### Background Tasks
+
+WireGuird uses goroutines for:
+
+1. **Update Checker** - Checks GitHub for new releases every 24 hours (`gui/gui.go:82-100`)
+2. **Stats Updater** - Updates transfer statistics every second (`gui/tunnels.go:833-874`)
+
+Both use tickers and channel operations to avoid busy-waiting.
+
+## Error Handling
+
+Errors are displayed to users via GTK message dialogs:
+
+```go gui/gui.go:106-118
+func ShowError(win *gtk.ApplicationWindow, err error, info ...string) {
+    if err == nil {
+        return
+    }
+
+    glib.IdleAdd(func() {
+        wlog("ERROR", err.Error())
+        dlg := gtk.MessageDialogNew(win, gtk.DIALOG_MODAL, gtk.MESSAGE_ERROR, gtk.BUTTONS_OK, "%s", err.Error())
+        dlg.SetTitle("Error")
+        dlg.Run()
+        dlg.Destroy()
+    })
+}
+```
+
+This function is called throughout the codebase to display error messages in a user-friendly way.
+
+## Summary
+
+WireGuird's architecture demonstrates:
+
+- **Clean separation of concerns** between UI, business logic, and persistence
+- **Effective use of GTK bindings** through gotk3 and Glade
+- **Hybrid WireGuard control** using both the wgctrl library and wg-quick
+- **Proper GTK threading** with `glib.IdleAdd()` for UI updates
+- **Resource embedding** for single-binary distribution
+- **Structured logging** with user-facing log display
+
+The codebase is well-organized for a GTK application, with clear entry points and a straightforward data flow from user actions to WireGuard control.
